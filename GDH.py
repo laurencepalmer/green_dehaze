@@ -15,6 +15,7 @@ import numpy as np
 import pickle
 import cv2
 import os
+import gc
 import pdb
 import datetime
 
@@ -22,6 +23,7 @@ import datetime
 DATADIR_PATH = "data/128x128_patches_resize_400x400_RGB/"
 HAZYDIR_NAME = "hazy"
 CLEARDIR_NAME = "gt"
+
 
 def parse_arguments():
     parser = ArgumentParser()
@@ -35,9 +37,11 @@ def parse_arguments():
     )
     parser.add_argument("--color_space", default="YUV", type=str)
     parser.add_argument("--load_path", default=None, type=str)
-    parser.add_argument("--load_pu", default = False, type = bool)
-    parser.add_argument("--load_features", default = False, type = bool)
+    parser.add_argument("--load_pu", default=False, type=bool)
+    parser.add_argument("--load_features", default=False, type=bool)
+    parser.add_argument("--make_rft_plots", default=False, type=bool)
     return vars(parser.parse_args())
+
 
 # prev_bias will be passed by the PixelHop unit explicitly
 saab_args = [
@@ -71,7 +75,7 @@ hop_args_3 = [
 
 feature_manager_args = {
     "block_sizes": [1, 2, 4, 8],
-    "n_bins": [64, 64, 64, 64],
+    "n_bins": [32, 32, 32, 32],
     "level_sizes": [128, 64, 32, 16],
 }
 
@@ -137,7 +141,8 @@ def model(
     save_path: str,
     load_path: str,
     load_pu: bool = False,
-    load_feature: bool = False
+    load_feature: bool = False,
+    make_rft_plots: bool = False,
 ):
     """Run the GDH model"""
     # pdb.set_trace()
@@ -168,31 +173,57 @@ def model(
         feature = pixelhop_units[i].transform(X)
         feature = feature_concat(feature)
 
-        # concatenate 1 hop features pixel by pixel 
-        
+        # concatenate 1 hop features pixel by pixel
+
         features_list.append(feature)
 
         if not load_pu:
             pixelhop_units[i].save(save_path + f"PU_{i}")
-        
+
+    num_selected_features = model_args.get("n_selected_args")
     if not load_feature:
         feature_manager = FeatureManager(
             features_list, **model_args.get("feature_manager_args")
         )
 
         # fit and transform with all of the RFTs
-        training_depth = model_args.get("training_depth")
-        num_selected_features = model_args.get("n_selected_args")
         for i in range(training_depth, -1, -1):
             feature_manager.fit_rft(targets=y, depth=i, calculate_mean=True)
             feature_manager.transform_rfts(n_selected=num_selected_features[i], depth=i)
+            gc.collect()
     else:
         with open(load_path + "feature_manager", "rb") as f:
             feature_manager = pickle.load(f)
             f.close()
+        feature_manager.training_features = features_list
+        feature_manager.transformed_features = {}
+        # set the training data
+        for i in range(training_depth, -1, -1):
+            feature_manager.transform_rfts(n_selected = num_selected_features[i], depth = i)
+        
 
     if not load_feature:
         feature_manager.save(save_path + f"feature_manager")
+
+    if make_rft_plots:
+        name_map = {
+            "0x0": "128x128 feature maps (7x7 kernel)",
+            "0x1": "128x128 feature maps (5x5 kernel)",
+            "0x2": "128x128 feature maps (3x3 kernel)",
+            "1x0": "64x64 feature maps (7x7 kernel)",
+            "1x1": "64x64 feature maps (5x5 kernel)",
+            "1x2": "64x64 feature maps (3x3 kernel)",
+            "2x0": "32x32 feature maps (7x7 kernel)",
+            "2x1": "32x32 feature maps (5x5 kernel)",
+            "2x2": "32x32 feature maps (3x3 kernel)",
+            "3x0": "16x16 feature maps (7x7 kernel)",
+            "3x1": "16x16 feature maps (5x5 kernel)",
+            "3x2": "16x16 feature maps (3x3 kernel)"
+        }
+        for i in range(training_depth + 1):
+            for j in range(n_pixel_hops):
+                # pdb.set_trace()
+                feature_manager.plot_rft_train_val(i, j, save_path+name_map[f"{i}x{j}"], name_map[f"{i}x{j}"])
 
     # single round of RFT
     # feature_manager.train_xgboost(
@@ -233,6 +264,7 @@ if __name__ == "__main__":
     load_path = cmd_args["load_path"]
     load_pu = cmd_args["load_pu"]
     load_features = cmd_args["load_features"]
+    make_rft_plots = cmd_args["make_rft_plots"]
 
     if color_space == "YUV":
         colorspace = cv2.COLOR_BGR2YUV
@@ -280,4 +312,15 @@ if __name__ == "__main__":
     #     f.close()
 
     # code for some tests
-    model(X_data, y_data, n_pixel_hops, training_depth, model_args, model_path, load_path, load_pu, load_features)
+    model(
+        X_data,
+        y_data,
+        n_pixel_hops,
+        training_depth,
+        model_args,
+        model_path,
+        load_path,
+        load_pu,
+        load_features,
+        make_rft_plots,
+    )

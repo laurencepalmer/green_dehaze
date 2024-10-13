@@ -35,9 +35,8 @@ class FeatureManager:
         training_features: List[dict],
         block_sizes: List[int],
         n_bins: List[int],
-        level_sizes: List[int]
+        level_sizes: List[int],
     ):
-        
         self.training_features = training_features
         self.block_sizes = block_sizes
         self.n_bins = n_bins
@@ -47,8 +46,13 @@ class FeatureManager:
         self.transformed_features = {}
         self.xgboosts = {}
 
-
-    def fit_rft(self, targets: np.array, depth: int, val_size: float = 0.2, calculate_mean: bool = True):
+    def fit_rft(
+        self,
+        targets: np.array,
+        depth: int,
+        val_size: float = 0.2,
+        calculate_mean: bool = True,
+    ):
         """
         Fits RFTs for a given depth
 
@@ -68,13 +72,15 @@ class FeatureManager:
         for phop_features in self.training_features:
             feature = phop_features[f"hop_{depth}"]
             N, H, W, C = feature.shape
-            X_t, X_v, y_t, y_v = train_test_split(feature, reshaped_targets, test_size = val_size)
+            X_t, X_v, y_t, y_v = train_test_split(
+                feature, reshaped_targets, test_size=val_size
+            )
             X_t = X_t.reshape(-1, C)
             X_v = X_v.reshape(-1, C)
             y_t = y_t.reshape(-1, 1)
             y_v = y_v.reshape(-1, 1)
             rft = RFT()
-            rft.fit(X_t, y_t, X_v, y_v, n_bins, remove_outliers = True)
+            rft.fit(X_t, y_t, X_v, y_v, n_bins, remove_outliers=True)
             self.rft_features[depth].append(rft)
         print(f"Done fitting RFTs for depth {depth}")
 
@@ -122,6 +128,27 @@ class FeatureManager:
         plt.legend()
         plt.savefig(save_path)
 
+    def plot_rft_train_val(self, depth: int, feat_ind: int, save_path: str, title: str):
+        """
+        Plots the RFT feature rankings in the training and validation set
+
+        :param depth: the depth to plot the features
+        :param feat_ind: the index at the depth to plot the rft for
+        :param save_path: the path to save the figures
+        :param title: the title of the figure
+        """
+        rfts = self.rft_features[depth][feat_ind]
+        train_rank = [i for i in rfts.dim_loss.keys()]
+        val_rank = [i for i in rfts.dim_loss_v.keys()]
+        y_values = [val_rank.index(i) for i in train_rank]
+
+        fig = plt.figure(figsize=(10, 10))
+        plt.plot(np.arange(len(train_rank)), y_values, ".")
+        plt.xlabel("Sorted Feature Index in Training")
+        plt.ylabel("Ranking in Validation")
+        plt.title(title)
+        plt.savefig(save_path)
+
     def make_blocks(
         self, X: np.array, block: int, calculate_mean: bool = False
     ) -> np.array:
@@ -165,11 +192,13 @@ class FeatureManager:
             X_train, X_val, y_train, y_val = train_test_split(
                 features, y.flatten(), test_size=val_size
             )
-        else: 
+        else:
             # otherwise, we must train on the residuals from the previous layer
-            residuals, y_prev_pred, y_prev_pred_resize = self.get_residuals(targets, depth + 1)
+            residuals, y_prev_pred, y_prev_pred_resize = self.get_residuals(
+                targets, depth + 1
+            )
             X_train, X_val, y_train, y_val = train_test_split(
-                features, residuals.flatten(), test_size = val_size
+                features, residuals.flatten(), test_size=val_size
             )
 
         train = xgb.DMatrix(X_train, label=y_train)
@@ -195,7 +224,11 @@ class FeatureManager:
         # loop through the previous predictions, interpolate, and then size them up to the right level
         for i in range(len(y_prev_pred)):
             y_prev_pred_resize.append(
-                cv2.resize(y_prev_pred[i], (self.level_sizes[depth - 1], self.level_sizes[depth - 1]), interpolation=cv2.INTER_LANCZOS4)
+                cv2.resize(
+                    y_prev_pred[i],
+                    (self.level_sizes[depth - 1], self.level_sizes[depth - 1]),
+                    interpolation=cv2.INTER_LANCZOS4,
+                )
             )
 
         y_prev_pred_resize = np.array(y_prev_pred_resize)
@@ -216,9 +249,11 @@ class FeatureManager:
         xgb_curr = self.xgboosts[deepest]
         X = xgb.DMatrix(features)
         predictions = xgb_curr.predict(X)
-        predictions = predictions.reshape(-1, self.level_sizes[deepest], self.level_sizes[deepest])
-       
-        # if we are not at the lowest level, then we must chain the previous predictions together 
+        predictions = predictions.reshape(
+            -1, self.level_sizes[deepest], self.level_sizes[deepest]
+        )
+
+        # if we are not at the lowest level, then we must chain the previous predictions together
         if depth < deepest:
             last_prediction = predictions
             for i in range(deepest - 1, depth - 1, -1):
@@ -232,7 +267,11 @@ class FeatureManager:
                 last_prediction_resize = []
                 for j in range(len(last_prediction)):
                     last_prediction_resize.append(
-                        cv2.resize(last_prediction[j], (self.level_sizes[i], self.level_sizes[i]), interpolation = cv2.INTER_LANCZOS4)
+                        cv2.resize(
+                            last_prediction[j],
+                            (self.level_sizes[i], self.level_sizes[i]),
+                            interpolation=cv2.INTER_LANCZOS4,
+                        )
                     )
                 last_prediction_resize = np.array(last_prediction_resize)
                 predictions = current_prediction + last_prediction_resize
@@ -243,6 +282,8 @@ class FeatureManager:
         """
         Saves the feature extractor object
         """
+        self.training_features = None
+        self.transformed_features = {}
         with open(path, "wb") as f:
             pickle.dump(self, f)
             f.close()

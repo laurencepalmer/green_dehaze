@@ -116,13 +116,21 @@ class RFT:
             y = list(self.dim_loss_v.values())
         return x, np.array(y)
 
-    def fit(self, X_t: np.array, y_t: np.array, X_v: np.array, y_v: np.array, n_bins: int, remove_outliers: bool = False):
+    def fit(
+        self,
+        X_t: np.array,
+        y_t: np.array,
+        X_v: np.array,
+        y_v: np.array,
+        n_bins: int,
+        remove_outliers: bool = False,
+    ):
         """
         Fits the RFT based on the loss function
 
         :param X_t: the input feature array for training
         :param y_t: the corresponding targets for X_t
-        :param X_v: the input feature array for testing 
+        :param X_v: the input feature array for testing
         :param y_v: the corresponding targets for X_v
         :param n_bins: the number of bins to
         :param remove_outliers: to remove outliers or not
@@ -138,11 +146,17 @@ class RFT:
         self.sorted_features = np.array(list(self.dim_loss.keys()))
         self.trained = True
 
-        # do the validation set 
+        # do the validation set
         for i in range(X_v.shape[1]):
-            min_loss_val = self.get_minimum_loss(X_v[:, i], y_v, n_bins, remove_outliers)
+            min_loss_val = self.get_minimum_loss(
+                X_v[:, i], y_v, n_bins, remove_outliers
+            )
             self.dim_loss_v[i] = min_loss_val
-        self.sorted_features_v = np.array(list(self.dim_loss.keys()))
+
+        self.dim_loss_v = {
+            k: v for k, v in sorted(self.dim_loss_v.items(), key=lambda item: item[1])
+        }
+        self.sorted_features_v = np.array(list(self.dim_loss_v.keys()))
 
     def transform(self, X: np.array, n_selected: int) -> np.array:
         """
