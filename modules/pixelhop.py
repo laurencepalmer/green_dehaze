@@ -91,6 +91,17 @@ class PixelHop:
         """
         if use_abs:
             X = np.absolute(X)
+
+        if type(method) == str:
+            if method == "np.max":
+                method = np.max
+            elif method == "np.min":
+                method = np.min
+            elif method == "np.mean":
+                method = np.mean
+            else:
+                raise ValueError("Method is not a valid method, choose from np.min, np.max, np.mean")
+        
         out = block_reduce(X, (1, pool, pool, 1), method)
         return out
 
