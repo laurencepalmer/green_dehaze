@@ -123,7 +123,7 @@ class RFT:
         X_v: np.array,
         y_v: np.array,
         n_bins: int,
-        remove_outliers: bool = False,
+        remove_outliers: bool = False
     ):
         """
         Fits the RFT based on the loss function

@@ -226,10 +226,6 @@ class PixelHop:
         self.cw_layers["layer_0"].append(saab)
         print(f"Layer 0 output {X.shape}")
 
-        # with open(f"saab_output_0_{init_hop_args['window']}", "wb") as f:
-        #     pickle.dump(X, f)
-        #     f.close()
-
         for i in range(1, self.depth):
             reduce_args = self.reduce_args[i]
             saab_args = self.saab_args[i]
@@ -238,10 +234,6 @@ class PixelHop:
             print(f"{'='*50} Layer {i}")
             X = self.cw_layer(X, saab_args, reduce_args, hop_args, i - 1)
             print(f"Layer {i} output {X.shape}")
-
-            # with open(f"saab_output_{i}_{init_hop_args['window']}", "wb") as f:
-            #     pickle.dump(X, f)
-            #     f.close()
 
         print(f"Done fitting")
         self.trained = True
@@ -263,8 +255,8 @@ class PixelHop:
         N, h, w, c = X.shape
         saab = self.cw_layers["layer_0"][0]
         transformed = saab.transform(transformed)
-        out["hop_0"] = transformed
-        print(f"{'='*50} Layer {0} output {transformed.shape}")
+        out[0] = transformed
+        print(f"{'='*50} Layer 0 output {transformed.shape}")
 
         for i in range(1, self.depth):
             reduce_args = self.reduce_args[i]
@@ -273,7 +265,7 @@ class PixelHop:
             transformed = self.cw_layer_transform(
                 transformed, reduce_args, hop_args, i - 1
             )
-            out[f"hop_{i}"] = transformed
+            out[i] = transformed
             print(f"{'='*50} Layer {i} output {transformed.shape}")
 
         return out
