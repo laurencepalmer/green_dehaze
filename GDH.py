@@ -11,6 +11,7 @@ import xgboost as xgb
 import matplotlib.pyplot as plt
 import numpy as np
 import pickle
+import copy
 import cv2
 import os
 import yaml
@@ -38,7 +39,7 @@ def parse_arguments():
     parser.add_argument("--make_plots", default=False, type=bool)
     return vars(parser.parse_args())
 
-def get_model_args(file_path: str, model_arch: str):
+def get_model_args(file_path: str, model_arch: str) -> dict:
     """
         Loads the specified yaml file and gets the arguments for that model architecture.
         
@@ -49,12 +50,11 @@ def get_model_args(file_path: str, model_arch: str):
     with open(file_path, "r") as f: 
         archs = yaml.safe_load_all(f)
         for a in archs: 
-            pdb.set_trace()
             if a["name"] == model_arch:
                 return a
     return dict()
 
-def process_data(color_space: str, channel: str, n_samples: int):
+def process_data(color_space: str, channel: str, n_samples: int) -> Tuple[np.array, np.array]:
     """Processes data based on args given"""
 
     if color_space == "YUV":
@@ -66,15 +66,11 @@ def process_data(color_space: str, channel: str, n_samples: int):
     data_args = {
         "color_transform": {"colorspace": colorspace},
     }
-
-    X, y = get_data(data_args, DATADIR_PATH, CLEARDIR_NAME, HAZYDIR_NAME)
-
+    X, y = get_data(data_args, DATADIR_PATH, CLEARDIR_NAME, HAZYDIR_NAME, n_samples)
     # y channel
     X_1, y_1 = split_channels(X, y, 0)
-
     # u channel
     X_2, y_2 = split_channels(X, y, 1)
-
     # v channel
     X_3, y_3 = split_channels(X, y, 2)
 
@@ -92,6 +88,42 @@ def process_data(color_space: str, channel: str, n_samples: int):
     y_data = y_data[:n_samples].squeeze(-1)
     return X_data, y_data
 
+def apply_pixelhops_noncascaded(X: np.array, model_depth: int, block_sizes: List[int], pixelhop_units: List[PixelHop], load_path: str, save_path: str) -> List[np.array]:
+    """
+    Applies the pixelhop units in a non-cascaded fashion by 
+    resizing the input image. 
+
+    :param X: the input data
+    :param depth: 
+    :param pixelhop_units: 
+    :return 
+    """
+    transformed = []
+    for i in range(model_depth):
+        resized = make_blocks(X, block_sizes[i], calculate_mean = True)
+        resized = np.expand_dims(resized, axis = -1)
+        for j in range(len(pixelhop_units)):
+            pixelhop_units[j].fit(resized)
+            transformed.append(pixelhop_units[j].transform(resized))
+        
+    if not load_path: 
+        for i in range(len(pixelhop_units)):
+            pixelhop_units[i].save(save_path + f"PU_{i}")
+
+    return transformed
+
+def apply_pixelhops_cascaded(X: np.array, pixelhop_units: List[PixelHop], load_path: str, save_path: str) -> List[np.array]:
+    transformed = []
+    for i in range(len(pixelhop_units)):
+        pixelhop_units[i].fit(X)
+        transformed.append(pixelhop_units[i].transform(X))
+
+    if not load_path: 
+        for i in range(len(pixelhop_units)):
+            pixelhop_units[i].save(save_path + f"PU_{i}")
+
+    return transformed
+
 def model(
     X: np.array,
     y: np.array,
@@ -101,6 +133,40 @@ def model(
     make_rft_plots: bool = False,
 ):
     """Run the GDH model"""
+
+    # feature extraction phase
+    pdb.set_trace()
+    pixelhop_units = []
+
+    if not load_path: 
+        pixel_args = model_args.get("pixelhops")
+        for unit in pixel_args.keys():
+            pixelhop_units.append(PixelHop(
+                **pixel_args[unit]
+            ))    
+    else:
+        pu_files = [f for f in os.listdir(load_path) if "PU" in f]
+        for pu in pu_files:
+            with open(load_path + "/" + pu, "rb") as f:
+                p = pickle.load(f)
+                f.close()
+            pixelhop_units.append(p)
+
+    # cascaded or not 
+    cascaded = model_args.get("cascaded")
+    model_depth = model_args.get("model_depth")
+    block_sizes = model_args.get("block_sizes")
+    if not cascaded: 
+        transformed = apply_pixelhops_noncascaded(X, model_depth, block_sizes, pixelhop_units, load_path)
+    else:
+        transformed = apply_pixelhops_cascaded(X, pixelhop_units, load_path, save_path)
+    
+    feat_concat = model_args.get("feat_concat")
+    if feat_concat: 
+        for i in range(len(transformed)): 
+            transformed[i] = feature_concat()
+    
+
     
     return None
 
@@ -115,7 +181,7 @@ if __name__ == "__main__":
     model_path = cmd_args["model_path"]
     color_space = cmd_args["color_space"]
     load_path = cmd_args["load_path"]
-    make_rft_plots = cmd_args["make_plots"]
+    make_plots = cmd_args["make_plots"]
     
     model_args = get_model_args(MODEL_ARCHS, model_arch)
 
@@ -124,13 +190,13 @@ if __name__ == "__main__":
         pickle.dump(model_args, f)
         f.close()
 
-    
+    X_data, y_data = process_data(color_space, channel, n_samples)
 
-    # model(
-    #     X_data,
-    #     y_data,
-    #     model_args,
-    #     model_path,
-    #     load_path,
-    #     make_rft_plots,
-    # )
+    model(
+        X_data,
+        y_data,
+        model_args,
+        model_path,
+        load_path,
+        make_plots,
+    )
