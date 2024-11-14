@@ -43,93 +43,6 @@ def parse_arguments():
     return vars(parser.parse_args())
 
 
-# prev_bias will be passed by the PixelHop unit explicitly
-saab_args = [
-    {"num_kernels": None, "thresh": None, "use_bias": False},
-    {"num_kernels": None, "thresh": None, "use_bias": True},
-    {"num_kernels": None, "thresh": None, "use_bias": True},
-    {"num_kernels": None, "thresh": None, "use_bias": True},
-]
-
-# hop arguments for each layer, essentially dictates our padding and window sizes
-hop_args_1 = [
-    {"pad": 3, "window": 7, "stride": 1, "method": "reflect"},
-    {"pad": 3, "window": 7, "stride": 1, "method": "reflect"},
-    {"pad": 3, "window": 7, "stride": 1, "method": "reflect"},
-    {"pad": 3, "window": 7, "stride": 1, "method": "reflect"},
-]
-
-hop_args_2 = [
-    {"pad": 2, "window": 5, "stride": 1, "method": "reflect"},
-    {"pad": 2, "window": 5, "stride": 1, "method": "reflect"},
-    {"pad": 2, "window": 5, "stride": 1, "method": "reflect"},
-    {"pad": 2, "window": 5, "stride": 1, "method": "reflect"},
-]
-
-hop_args_3 = [
-    {"pad": 1, "window": 3, "stride": 1, "method": "reflect"},
-    {"pad": 1, "window": 3, "stride": 1, "method": "reflect"},
-    {"pad": 1, "window": 3, "stride": 1, "method": "reflect"},
-    {"pad": 1, "window": 3, "stride": 1, "method": "reflect"},
-]
-
-feature_manager_args = {
-    "block_sizes": [1, 2, 4, 8],
-    "n_bins": [32, 32, 32, 32],
-    "level_sizes": [128, 64, 32, 16],
-}
-
-# reduce args, first layer of c/w we never reduce
-reduce_args = [
-    {"pool": 2, "method": np.max, "use_abs": True},
-    {"pool": 2, "method": np.max, "use_abs": True},
-    {"pool": 2, "method": np.max, "use_abs": True},
-]
-
-depth = [4, 4, 4]
-
-n_pixel_hops = 3
-
-# training_depth starts at 0
-training_depth = 3
-
-# numbers of features to select from the RFT procedure
-n_selected_args = {0: [20, 20, 20], 1: [20, 20, 20], 2: [20, 20, 20], 3: [20, 20, 20]}
-
-xgboost_args = {
-    "params": {
-        "tree_method": "hist",
-        "gpu_id": None,
-        "objective": "reg:squarederror",
-        "max_depth": 4,
-        "learning_rate": 0.5,
-        "eval_metric": "rmse",
-    },
-    "num_boost_round": 2000,
-    "early_stopping_rounds": 200,
-}
-
-val_size = 0.2
-
-model_args = {
-    "hop_args_0": hop_args_1,
-    "hop_args_1": hop_args_2,
-    "hop_args_2": hop_args_3,
-    "saab_args_0": saab_args,
-    "saab_args_1": saab_args,
-    "saab_args_2": saab_args,
-    "reduce_args_0": reduce_args,
-    "reduce_args_1": reduce_args,
-    "reduce_args_2": reduce_args,
-    "feature_manager_args": feature_manager_args,
-    "depth": depth,
-    "training_depth": training_depth,
-    "n_selected_args": n_selected_args,
-    "xgboost_args": xgboost_args,
-    "val_size": val_size,
-}
-
-
 # @profile
 # @timer
 def model(
@@ -306,12 +219,6 @@ if __name__ == "__main__":
     X_data = X_data[:n_samples]
     y_data = y_data[:n_samples].squeeze(-1)
 
-    # m = model(X_data, y_data, n_pixel_hops, model_args)
-    # with open(f"{model_path}{model_name}", "wb") as f:
-    #     pickle.dump(m, f)
-    #     f.close()
-
-    # code for some tests
     model(
         X_data,
         y_data,

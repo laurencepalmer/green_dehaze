@@ -165,8 +165,7 @@ cython_debug/
 .DS_STORE
 
 # don't include data and scratch
-data/patch_sample
-data/RESIDE
+data/*
 data/test_comparison
 scratch*.ipynb
 models/*

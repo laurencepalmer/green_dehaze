@@ -1,0 +1,248 @@
+# This yaml file contains all of the arguments used to define a model architecture.
+# The meat of each model is in the pixelhops, rfts, lnts, and xgboosts. Note that 
+# - defines a list while <param>: specifies a key-value pair. 
+
+# The pixelhops defines all the pixelhop units that will be used in the model. 
+# The number of saab args and hop args defined for each of the pixelhops 
+# (given by pixelhop_i) should be of equal length. The reduce args should actually
+# be one less than the number of saab and hop args since pooling happens between 
+# successive applications of the Saab. 
+
+# The rfts are self explanatory. The number of rfts you define should be equivalent to the depth 
+# of the model. For the LNTs, set the compound argument to True if you want to run a compound LNT.
+# When the compound LNT is run, we use the lnt_args across all of the successive applications of 
+# the LNT. You also have to specify the parameters for the RFT procedures in between the rounds. 
+---
+name: "cascaded_pixelhop_depth_7"
+model_depth: 7
+pixelhops: 
+  pixelhop_1:
+    saab_args:
+      - num_kernels:
+        thresh: 
+        use_bias: False
+      - num_kernels: 
+        thresh:
+        use_bias: True
+      - num_kernels: 
+        thresh:
+        use_bias: True
+      - num_kernels: 
+        thresh:
+        use_bias: True
+      - num_kernels: 
+        thresh:
+        use_bias: True
+      - num_kernels: 
+        thresh:
+        use_bias: True
+      - num_kernels: 
+        thresh:
+        use_bias: True
+    hop_args:
+      - pad: 1
+        window: 3
+        stride: 1
+        method: reflect
+      - pad: 1
+        window: 3
+        stride: 1
+        method: reflect
+      - pad: 1
+        window: 3
+        stride: 1
+        method: reflect
+      - pad: 1
+        window: 3
+        stride: 1
+        method: reflect
+      - pad: 1
+        window: 3
+        stride: 1
+        method: reflect
+      - pad: 1
+        window: 3
+        stride: 1
+        method: reflect
+      - pad: 1
+        window: 3
+        stride: 1
+        method: reflect
+    reduce_args:
+      - pool: 2
+        method: np.max
+        use_abs: True
+      - pool: 2
+        method: np.max
+        use_abs: True
+      - pool: 2
+        method: np.max
+        use_abs: True
+      - pool: 2
+        method: np.max
+        use_abs: True
+      - pool: 2
+        method: np.max
+        use_abs: True
+      - pool: 2
+        method: np.max
+        use_abs: True
+      - pool: 2
+        method: np.max
+        use_abs: True
+rfts:
+  rft_1:
+    n_bins: 16
+    n_selected: 81
+  rft_2:
+    n_bins: 16
+    n_selected: 81
+  rft_3:
+    n_bins: 16
+    n_selected: 81
+  rft_4:
+    n_bins: 16
+    n_selected: 81
+  rft_5:
+    n_bins: 16
+    n_selected: 81
+  rft_6:
+    n_bins: 16
+    n_selected: 81
+  rft_7:
+    n_bins: 16
+    n_selected: 81
+lnts:
+  type: compound
+  n_rounds: 4
+  lnt_args:
+    num_tree: 400
+    depth: 2
+    args: 
+      lnt_lr: 0.05
+      gpu_id: 
+  rfts:
+    rft_1: 
+      n_bins: 16
+      n_selected: 70
+    rft_2: 
+      n_bins: 16
+      n_selected: 175
+    rft_3: 
+      n_bins: 16
+      n_selected: 375
+    rft_4: 
+      n_bins: 16
+      n_selected: 425
+block_sizes:
+  - 2
+  - 4
+  - 8
+  - 16
+  - 32
+  - 64
+level_sizes: 
+  - 128
+  - 64
+  - 32
+  - 16
+  - 8
+  - 4
+  - 2
+xgboost:
+  params:
+    tree_method: hist
+    gpu_id: 
+    objective: reg:squarederror
+    max_depth: 4
+    learning_rate: 0.05
+    eval_metric: rmse
+  num_boost_round: 6000
+  early_stopping_rounds: 100
+---
+name: "noncascaded_pixelhop_depth_7"
+model_depth: 7
+pixelhops: 
+  pixelhop_1:
+    saab_args:
+      - num_kernels:
+        thresh: 
+        use_bias: False
+    hop_args:
+      - pad: 1
+        window: 3
+        stride: 1
+        method: reflect
+    reduce_args:
+      - pool: 2
+        method: np.max
+        use_abs: True
+rfts:
+  rft_1:
+    n_bins: 16
+    n_selected: 81
+  rft_2:
+    n_bins: 16
+    n_selected: 81
+  rft_3:
+    n_bins: 16
+    n_selected: 81
+  rft_4:
+    n_bins: 16
+    n_selected: 81
+  rft_5:
+    n_bins: 16
+    n_selected: 81
+  rft_6:
+    n_bins: 16
+    n_selected: 81
+  rft_7:
+    n_bins: 16
+    n_selected: 81
+lnts:
+  type: compound
+  n_rounds: 4
+  lnt_args:
+    num_tree: 400
+    depth: 2
+    args: 
+      lnt_lr: 0.05
+      gpu_id: 
+  rfts:
+    rft_1: 
+      n_bins: 16
+      n_selected: 70
+    rft_2: 
+      n_bins: 16
+      n_selected: 175
+    rft_3: 
+      n_bins: 16
+      n_selected: 375
+    rft_4: 
+      n_bins: 16
+      n_selected: 425
+block_sizes:
+  - 2
+  - 4
+  - 8
+  - 16
+  - 32
+  - 64
+level_sizes: 
+  - 128
+  - 64
+  - 32
+  - 16
+  - 8
+  - 4
+  - 2
+xgboost:
+  params:
+    tree_method: hist
+    gpu_id: 
+    objective: reg:squarederror
+    max_depth: 4
+    learning_rate: 0.05
+    eval_metric: rmse
+  num_boost_round: 6000
+  early_stopping_rounds: 100
