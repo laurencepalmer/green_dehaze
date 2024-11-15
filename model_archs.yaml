@@ -12,6 +12,10 @@
 # of the model. For the LNTs, set the compound argument to True if you want to run a compound LNT.
 # When the compound LNT is run, we use the lnt_args across all of the successive applications of 
 # the LNT. You also have to specify the parameters for the RFT procedures in between the rounds. 
+
+# Note that the feature concatentation is restricted to only 1-hop neighbors
+
+# TODO: add functionality to put initializing arguments in the RFTs
 ---
 name: "cascaded_pixelhop_depth_7"
 model_depth: 7
@@ -140,6 +144,7 @@ lnts:
       n_bins: 16
       n_selected: 425
 block_sizes:
+  - 1
   - 2
   - 4
   - 8
@@ -229,6 +234,7 @@ lnts:
       n_bins: 16
       n_selected: 425
 block_sizes:
+  - 1
   - 2
   - 4
   - 8
@@ -436,10 +442,10 @@ lnts:
       n_bins: 16
       n_selected: 425
 block_sizes:
+  - 1
   - 2
   - 4
   - 8
-  - 16
 level_sizes: 
   - 128
   - 64
