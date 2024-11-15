@@ -249,7 +249,7 @@ class PixelHop:
         print(f"Done fitting")
         self.trained = True
 
-    def transform(self, X: np.array) -> np.array:
+    def transform(self, X: np.array) -> dict:
         """
         Perform the c/w saab transform on the kernels that were fit
 
