@@ -148,7 +148,7 @@ class HazeDataset:
 
         return data
     
-    def import_images_custom(self, n_samples) -> List[Tuple[np.array, np.array]]:
+    def import_images_custom(self) -> List[Tuple[np.array, np.array]]:
         """Helper to import images that have already been modified"""
         full_clear_path = self.dataset_folder + self.clear_dataset_name
         full_haze_path = self.dataset_folder + self.hazy_dataset_name
@@ -158,9 +158,7 @@ class HazeDataset:
         all_clear.sort()
         all_haze.sort()
         pairs = [(i, j) for i, j in zip(all_clear, all_haze)]
-        random.shuffle(pairs)
         data = []
-        pairs = pairs[:n_samples]
         for clear, hazy in pairs:
             clear_path = f"{full_clear_path}/{clear}"
             haze_path = f"{full_haze_path}/{hazy}"
@@ -196,10 +194,10 @@ def timer(f: Callable):
 
     return timer
 
-def get_data(args: Dict[str, dict], datadir_path: str, cleardir_name: str, hazydir_name: str, n_samples: int) -> Tuple[np.array, np.array]:
+def get_data(args: Dict[str, dict], datadir_path: str, cleardir_name: str, hazydir_name: str) -> Tuple[np.array, np.array]:
     """Loads data, use args to pass kwargs depending on how to augment"""
     ds = HazeDataset(datadir_path, cleardir_name, hazydir_name)
-    data = ds.import_images_custom(n_samples)
+    data = ds.import_images_custom()
 
     data_augmented = {"clear": [], "hazy": []}
     # resize and pad if needed
@@ -243,8 +241,8 @@ def split_channels(X: np.array, y: np.array, c: int = 0) -> np.array:
     return X_c, y_c
 
 def feature_concat(
-        Xs: dict, 
-        training_depth: int = None,
+        Xs: Dict[int, np.array], 
+        training_depth: int, 
         pad: int = 1,
         stride: int = 1,
         window: int = 3,
@@ -255,14 +253,15 @@ def feature_concat(
     Default params concatenates features for every 1-hop neighbor for every pixel
     
     :param Xs: the input data 
+    :param training_depth: the depth of the data to concatenate for, -1 if we want to train all
     :param pad: how much padding to use
     :param stride: step size for the window
     :param window: size of the window, window x window = # of neighbors for feature concatentation 
     :param method: what method to use for the padding
     """
     concated = {}
-    if not training_depth:
-        for i in Xs.keys():
+    for i in Xs.keys():
+        if training_depth < 0 or (training_depth >= 0 and training_depth == i):
             feature = Xs[i]
             print(f"Concatenating feature with dimension {feature.shape}")
             N, h, w, c = feature.shape
@@ -271,15 +270,7 @@ def feature_concat(
             feature = feature.reshape(N, h, w, -1)
             print(f"Resulting feature shape {feature.shape}")
             concated[i] = feature
-    else:
-        feature = Xs[training_depth]
-        print(f"Concatenating feature with dimension {feature.shape}")
-        N, h, w, c = feature.shape
-        feature = np.pad(feature, ((0, 0), (pad, pad), (pad, pad), (0, 0)), mode=method)
-        feature = view_as_windows(feature, (1, window, window, c), (1, stride, stride, c))
-        feature = feature.reshape(N, h, w, -1)
-        print(f"Resulting feature shape {feature.shape}")
-        concated[training_depth] = feature
+
     return concated
 
 def make_blocks(
@@ -291,7 +282,7 @@ def make_blocks(
         GUSL pipeline. Ensure that H//block and Y//block == the shape of the features
         at the relevant level of the RFT.
 
-        :param X: the input array
+        :param X: the input array, should be size (N, H, W)
         :param block: the block size to calculate
         :param calculate_mean: whether to compress down with mean
         :return blocks: the resulting blocks
