@@ -22,7 +22,7 @@ import pdb
 import datetime
 
 
-DATADIR_PATH = "data/128x128_patches_RGB_indoor_outdoor/indoor/"
+DATADIR_PATH = "data/128x128_patches_RGB_indoor_outdoor/outdoor/"
 HAZYDIR_NAME = "hazy"
 CLEARDIR_NAME = "gt"
 MODEL_ARCHS = "model_archs.yaml"
@@ -45,6 +45,7 @@ def parse_arguments():
     parser.add_argument("--training_depth", default=-1, type=int)
     parser.add_argument("--seed", default=10, type=int)
     parser.add_argument("--val_size", default=0.2, type=float)
+    parser.add_argument("--pu_train_size", default = 0.5, type = float)
     return vars(parser.parse_args())
 
 
@@ -104,9 +105,11 @@ def process_data(
 
 def apply_pixelhops_noncascaded(
     X: np.array,
+    train_size: float, 
     model_depth: int,
     block_sizes: List[int],
     pixelhop_units: List[PixelHop],
+    trained_pixelhop_units: List[Dict[int, PixelHop]],
     training_depth: int,
     load_pu: bool,
     save_path: str,
@@ -116,52 +119,71 @@ def apply_pixelhops_noncascaded(
     resizing the input image.
 
     :param X: the input data
+    :param train_size: how many samples to train the PUs on as a percentage of the total samples
     :param model_depth: how deep the model goes, determines the block sizes
     :param pixelhop_units: the pixelhop units to fit and transform
+    :param trained_pixelhop_units: the pixelhop units that are already trained
     :param training_depth: a specific training depth to train the model, -1 means train all
     :param load_pu: whether the pixelhops were loaded or not, controls whether we save them
     :param save_path: the path to save the PUs if we didn't load them up
     :return transformed: the input data X transformed by the Pixelhop units given in pixelhop_units
     """
     transformed = [{}] * len(pixelhop_units)
+    indexes = np.arange(len(X))
+    np.random.shuffle(indexes)
+    N = round(len(X) * train_size)
+    X_train = X[indexes[:N]]
+    X_train = X_train.squeeze(-1)
     X = X.squeeze(-1)
-
+    gc.collect()
     # list to store the non-cascaded pixelhops, should end up with model_depth*len(pixelhop_units) if training all
     new_pixelhop_units = []
     for i in range(model_depth):
         # we train the pixelhop on the given block size if training_depth is given or its the -1 value
         if training_depth < 0 or (training_depth >= 0 and i == training_depth):
-            resized = make_blocks(X, block_sizes[i], calculate_mean=True)
+            resized = make_blocks(X_train, block_sizes[i], calculate_mean=True) # train on the subsample of training data
             resized = np.expand_dims(resized, axis=-1)
             tmp = []
             for j in range(len(pixelhop_units)):
                 pu = copy.deepcopy(pixelhop_units[j])
                 if not load_pu:
                     pu.fit(resized)
-                t = pu.transform(resized)
-                transformed[j].update({i: t[0]})
                 tmp.append(pu)
             new_pixelhop_units.append(tmp)
+            tmp = None
+            resized = None
+            gc.collect()
+    
+    # tranform the input data
+    for i in range(model_depth):
+        if training_depth < 0 or (training_depth >= 0 and i == training_depth):
+            resized = make_blocks(X, block_sizes[i], calculate_mean = True)
+            resized = np.expand_dims(resized, axis=-1)
+            for j in range(len(new_pixelhop_units[i])):
+                t = new_pixelhop_units[i][j].transform(resized)
+                transformed[j].update({i: t[0]}) 
 
     if not load_pu:
         for i in range(len(new_pixelhop_units)):
             for j in range(len(pixelhop_units)):
+                # i is the pixelhop unit number, j is the depth
                 new_pixelhop_units[i][j].save(
                     save_path
-                    + f"PU_{i}_{new_pixelhop_units[i][j].hop_args[0]['window']}"
-                )
+                    + f"PU_{i}_{new_pixelhop_units[i][j].hop_args[0]['window']}_{j}"
+                ) 
         pixelhop_units = None
     gc.collect()
     return transformed
 
 
 def apply_pixelhops_cascaded(
-    X: np.array, pixelhop_units: List[PixelHop], load_pu: bool, save_path: str
+    X: np.array, train_size: float, pixelhop_units: List[PixelHop], load_pu: bool, save_path: str
 ) -> List[Dict[int, np.array]]:
     """
     Applies the Pixelhops in cascaded manner, i.e. no resizing done, but rather pooling operations
 
     :param X: the input data
+    :param train_size: how many samples to train the PUs on as a percentage of the total samples
     :param y: the target values Xs
     :param pixelhop_units: the Pixelhop units to apply to the input data
     :param load_pu: whether the Pixelhop units were loaded or not, controls whether we save the fitted PUs
@@ -169,9 +191,16 @@ def apply_pixelhops_cascaded(
     :return transformed: the data transformed by the PU units
     """
     transformed = []
+    indexes = np.arange(len(X))
+    np.random.shuffle(indexes)
+    N = round(len(X) * train_size)
+    X_train = X[indexes[:N]]
+    X_train = X_train.squeeze(-1)
+    X = X.squeeze(-1)
+    gc.collect()
     for i in range(len(pixelhop_units)):
         if not load_pu:
-            pixelhop_units[i].fit(X)
+            pixelhop_units[i].fit(X_train)
         transformed.append(pixelhop_units[i].transform(X))
 
     if not load_pu:
@@ -424,6 +453,11 @@ def apply_lnts(
     gc.collect()
     return transformed
 
+def generate_residuals(Xs: List[np.array], y: np.array, prev_xgbs: List[SingleXGBoost], save_xgb: bool, save_path: str):
+
+
+    return None
+
 
 def train_xgboosts(
     Xs: List[np.array],
@@ -508,33 +542,40 @@ def model(
 
     # FEATURE EXTRACTION
     pixelhop_units = []
+    pixel_args = model_args.get("pixelhops")
 
-    if load_pu:
+    # get the baseline pixelhop units we will use
+    for unit in pixel_args.keys():
+        pixelhop_units.append(PixelHop(**pixel_args[unit]))
+
+    trained_pixelhop_units = [{}] *len(pixelhop_units)
+    if load_pu: # if we're loading pixelhop units then we are training a higher level
         pu_files = [f for f in os.listdir(load_path) if "PU" in f]
         for pu in pu_files:
+            _, pu_unit, window, depth = pu.split("_")
             with open(load_path + "/" + pu, "rb") as f:
                 p = pickle.load(f)
                 f.close()
-            pixelhop_units.append(p)
-    else:
-        pixel_args = model_args.get("pixelhops")
-        for unit in pixel_args.keys():
-            pixelhop_units.append(PixelHop(**pixel_args[unit]))
+            # first list index is the associated pixelhop unit number and key to the dict is the depth
+            trained_pixelhop_units[int(pu_unit)][int(depth)] = p
 
     # cascaded or not
     cascaded = model_args.get("cascaded")
     model_depth = model_args.get("model_depth")
     block_sizes = model_args.get("block_sizes")
+    pu_train_size = model_args.get("pu_train_size")
     if cascaded:
-        transformed = apply_pixelhops_cascaded(X, pixelhop_units, load_pu, save_path)
+        transformed = apply_pixelhops_cascaded(X, pu_train_size, pixelhop_units, load_pu, save_path)
     else:
         transformed = apply_pixelhops_noncascaded(
             X,
+            pu_train_size, 
             model_depth,
             block_sizes,
             pixelhop_units,
+            trained_pixelhop_units,
             training_depth,
-            load_pu,
+            False, # we would always save these since we're creating the new ones
             save_path,
         )
 
@@ -617,6 +658,8 @@ def model(
     xgboost_args = model_args.get("xgboost")
     max_depth = model_args.get("model_depth")
     prev_xgbs = []
+
+    # first XGBoost
     sxgb = train_xgboosts(
         features, 
         y, 
@@ -630,6 +673,8 @@ def model(
         True, 
         save_path
     )
+
+
 
     return None
 
@@ -650,6 +695,7 @@ if __name__ == "__main__":
     load_xgb = cmd_args["load_xgb"]
     seed = cmd_args["seed"]
     val_size = cmd_args["val_size"]
+    pu_train_size = cmd_args["pu_train_size"]
 
     set_seed(seed)
 
