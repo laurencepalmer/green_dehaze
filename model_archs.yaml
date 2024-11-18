@@ -176,6 +176,7 @@ cascaded: False
 feat_concat: True
 pixelhops: 
   pixelhop_1:
+    discard_threshold: 0 # discard threshold is set to 0 so we don't throw any kernels
     saab_args:
       - num_kernels:
         thresh: 
@@ -189,28 +190,28 @@ pixelhops:
       - pool: 2
         method: np.max
         use_abs: True
-rfts:
+rfts: # these are set arbitrarily high to select all the features, noncascaded has significantly fewer features
   rft_1:
     n_bins: 16
-    n_selected: 81
+    n_selected: 10000
   rft_2:
     n_bins: 16
-    n_selected: 81
+    n_selected: 10000
   rft_3:
     n_bins: 16
-    n_selected: 81
+    n_selected: 10000
   rft_4:
     n_bins: 16
-    n_selected: 81
+    n_selected: 10000
   rft_5:
     n_bins: 16
-    n_selected: 81
+    n_selected: 10000
   rft_6:
     n_bins: 16
-    n_selected: 81
+    n_selected: 10000
   rft_7:
     n_bins: 16
-    n_selected: 81
+    n_selected: 10000
 lnts:
   type: compound
   n_rounds: 4
