@@ -112,14 +112,4 @@ class LNT:
         tree_paths = [np.array(path) for path in unique_tree_paths]
         self.no_tree = len(tree_paths)
         return tree_paths
-    
-class CompoundLNT(LNT):
-    def __init__(self, n_rounds: int, lnt_args):
-        """
-        Class to run the compound LNT procedure
-        
-        :param n_rounds: the number of rounds for the compount LNT
-        :param lnt_args: the arguments to use for the LNT themselves 
-        """
-
         

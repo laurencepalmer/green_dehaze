@@ -22,7 +22,7 @@ import pdb
 import datetime
 
 
-DATADIR_PATH = "data/128x128_patches_resize_400x400_YUV/"
+DATADIR_PATH = "data/128x128_patches_RGB_indoor_outdoor/indoor/"
 HAZYDIR_NAME = "hazy"
 CLEARDIR_NAME = "gt"
 MODEL_ARCHS = "model_archs.yaml"
@@ -110,7 +110,7 @@ def apply_pixelhops_noncascaded(
     training_depth: int,
     load_pu: bool,
     save_path: str,
-) -> List[np.array]:
+) -> List[Dict[int, np.array]]:
     """
     Applies the pixelhop units in a non-cascaded fashion by
     resizing the input image.
@@ -157,7 +157,7 @@ def apply_pixelhops_noncascaded(
 
 def apply_pixelhops_cascaded(
     X: np.array, pixelhop_units: List[PixelHop], load_pu: bool, save_path: str
-) -> List[np.array]:
+) -> List[Dict[int, np.array]]:
     """
     Applies the Pixelhops in cascaded manner, i.e. no resizing done, but rather pooling operations
 
@@ -196,8 +196,8 @@ def apply_rfts(
     training_depth: int,
     load_rft: bool,
     save_path: str,
-    make_plots: bool
-) -> List[int]:
+    make_plots: bool,
+) -> List[Dict[int, np.array]]:
     """
     Applies the RFTs to the given data
 
@@ -214,14 +214,16 @@ def apply_rfts(
     :param save_path: the path to save the RFTs if they weren't loaded
     :return transformed: output of fitting and transforming based on the rft arguments given
     """
-    pdb.set_trace()
     transformed = []
     new_rft_units = []
-
+    print(f"{'='*50} Fitting RFTs")
     for i in range(len(Xs)):  # range over each pixelhop
         tmp = {}
-        for k in Xs[i].keys():  # range over the raw features of the given pixelhop, each k is a depth
+        for k in Xs[
+            i
+        ].keys():  # range over the raw features of the given pixelhop, each k is a depth
             if training_depth < 0 or (training_depth >= 0 and training_depth == k):
+                print(f"Fitting RFT for PU unit {i} and depth {k}")
                 feature = Xs[i][k]
                 reshaped_targets = make_blocks(y, block_sizes[k], calculate_mean=True)
                 N, H, W, C = feature.shape
@@ -236,9 +238,7 @@ def apply_rfts(
 
                 rft = copy.deepcopy(rft_units[k])
                 if not load_rft:
-                    rft.fit(
-                        X_t, y_t, X_v, y_v, n_bins[k], remove_outliers=True
-                    )
+                    rft.fit(X_t, y_t, X_v, y_v, n_bins[k], remove_outliers=True)
                 tmp[k] = rft.transform(
                     feature.reshape(-1, feature.shape[-1]), n_selected[k]
                 )
@@ -255,7 +255,7 @@ def apply_rfts(
                 pickle.dump(rft, f)
                 f.close()
         new_rft_units = None
-
+    print(f"{'='*50} Done fitting RFTs")
     gc.collect()
     return transformed
 
@@ -264,34 +264,45 @@ def generate_rft_plots(rfts: List[Tuple[RFT, int, int]], save_path: str):
     """
     Creates plots for an RFT procedure including joint validation and RFT curve
 
-    :param rfts: List of tuples with the RFT as the first entry, the depth the RFT was applied to 
-    as the second argument, and the associated pixelhop unit as the last entry    
+    :param rfts: List of tuples with the RFT as the first entry, the depth the RFT was applied to
+    as the second argument, and the associated pixelhop unit as the last entry
     :param save_path: where to save the plots for the RFT
     """
 
     # organize everything
     grouped_rfts = DefaultDict(list)
-    for rft, depth, pu_num in rfts:
-        grouped_rfts[depth].append((rft, pu_num))
+    if len(rfts[0]) == 3:  # with three these are the RFTs that take in raw features
+        name = "rft_curve"
+        for rft, depth, pu_num in rfts:
+            grouped_rfts[depth].append((rft, pu_num))
+    else:  # with 4 these are the RFTs we use between successive LNTs
+        name = "rft_curve_lnt"
+        for rft, depth, pu_num, round in rfts:
+            grouped_rfts[depth].append((rft, f"{pu_num}_{round}"))
 
     for k in grouped_rfts.keys():
         rft_curve_fig = plt.figure()
         for rft, pu_num in grouped_rfts[k]:
             x, y = rft.get_curve("train")
-            plt.plot(x, y, label = f"{pu_num}")
-            plot_rft_train_val(rft, save_path + f"jr_{k}_{pu_num}", f"Joint Ranking Curve For RFT at Depth {k}, PU {pu_num}")
+            plt.plot(x, y, label=f"{pu_num}")
+            plot_rft_train_val(
+                rft,
+                save_path + f"jr_{k}_{pu_num}",
+                f"Joint Ranking Curve For RFT at Depth {k}, PU {pu_num}",
+            )
         plt.xlabel("Sorted Feature Index")
         plt.ylabel(f"RFT loss {rft.loss_name}")
         plt.title(f"RFT Curves for Depth {k}")
         plt.legend()
-        plt.savefig(save_path + f"rft_curve_{k}")
+        plt.savefig(save_path + f"{name}_{k}")
         plt.close()
-        
+
+
 def plot_rft_train_val(rft: RFT, save_path: str, title: str):
     """
-    Plots joint ranking curve for a given rft 
+    Plots joint ranking curve for a given rft
 
-    :param rft: the RFT to make the plot for 
+    :param rft: the RFT to make the plot for
     :param save_path: where to save it
     :param title: the title of the RFT curve
     """
@@ -307,13 +318,177 @@ def plot_rft_train_val(rft: RFT, save_path: str, title: str):
     plt.savefig(save_path)
     plt.close()
 
+
 # TODO: add the LNT module
-def apply_lnts(lnts: List[LNT], rfts: List[RFT], n_selected: List[int], n_bins: List[int]):
+def apply_lnts(
+    Xs: List[Dict[int, np.array]],
+    y: np.array,
+    lnt: LNT,
+    rfts: List[RFT],
+    train_index: List[int],
+    val_index: List[int],
+    n_rounds: int,
+    n_selected: List[int],
+    n_bins: List[int],
+    block_sizes: List[int],
+    training_depth: int,
+    load_lnt: bool,
+    save_path: str,
+    make_plots: bool,
+):
     """
     This module applies LNTs, can also run the compound LNT procedure if the relevant arguments are given
-    
+
+    :param Xs: the input features, the length of the list is the number of PU units and the keys in the dict are the depth of the features
+    :param y: the target values
+    :param lnts: the LNT to apply
+    :param rfts: the RFTs to use between successive LNTs
+    :param train_index: the indices to use for training
+    :param val_index: the indices to use for validation
+    :param n_rounds: how many times to apply the LNT consequently, the number of rounds
+    :param n_selected: the number of selected features that we want to keep between successive lnts/rfts
+    :param n_bins: the number of bins to use for the RFT procedures
+    :param block_sizes: the size of the dimension at a given depth
+    :param training_depth: the specific depth to train on if given
+    :param load_lnt: whether the LNTs were loaded or not
+    :param save_path: where to save the LNTs
+    :param make_plots: whether to plot the compound rft procedures between the LNTs
+    :return transformed: the transformed features for a given depth
     """
-    return None
+    transformed = []
+    fitted_lnts = []
+    fitted_rfts = []
+    for i in range(len(Xs)):
+        tmp = {}
+        for k in Xs[i].keys():
+            if training_depth < 0 or (training_depth >= 0 and training_depth == k):
+                feature = Xs[i][k]
+                y_reshaped = make_blocks(y, block_sizes[k], calculate_mean=True)
+                N, H, W = y_reshaped.shape
+                y_train = y_reshaped[train_index].flatten()
+                y_val = y_reshaped[val_index].flatten()
+                y_reshaped = y_reshaped.flatten()
+                feature_cp = copy.deepcopy(feature)
+
+                print(
+                    f"{'='*50} Fitting LNTs for PU {i} depth {k} (n_rounds: {n_rounds})"
+                )
+                for j in range(n_rounds):  # compound lnt means n_rounds > 0
+                    print(f"Round {j} input feature shape {feature_cp.shape}")
+                    lnt_cp = copy.deepcopy(lnt)
+                    if not load_lnt:
+                        lnt_cp.fit(feature_cp, y_reshaped)
+
+                    fitted_lnts.append((lnt_cp, k, i, j))
+                    lnt_out = lnt_cp.transform(feature_cp)
+
+                    # we have to reshape the transformed back to the original shape to provide the correct train/val indices
+                    _, C = lnt_out.shape
+                    lnt_out = lnt_out.reshape(N, H, W, -1)
+                    rft = copy.deepcopy(rfts[j])
+                    lnt_out_t = lnt_out[train_index].reshape(-1, C)
+                    lnt_out_v = lnt_out[val_index].reshape(-1, C)
+                    lnt_out = lnt_out.reshape(-1, C)
+
+                    rft.fit(
+                        lnt_out_t,
+                        y_train,
+                        lnt_out_v,
+                        y_val,
+                        n_bins[j],
+                        remove_outliers=True,
+                    )
+                    fitted_rfts.append((rft, k, i, j))
+                    rft_out = rft.transform(lnt_out, n_selected[j])
+                    feature_cp = np.concatenate([feature, rft_out], axis=-1)
+
+                tmp[k] = rft_out
+                print(f"{'='*50} Done fitting LNTs")
+            
+            transformed.append(tmp)
+
+                # TODO: figure out how we would load this from already trained rfts
+    if make_plots:
+        generate_rft_plots(fitted_rfts, save_path)
+
+    # TODO: save these RFTS
+    if not load_lnt:
+        for i in range(len(fitted_lnts)):
+            lnt, depth, pu_unit, round = fitted_lnts[i]
+            with open(save_path + f"LNT_{depth}_{pu_unit}_{round}", "wb") as f:
+                pickle.dump(lnt, f)
+                f.close()
+
+        fitted_lnts = None
+
+    gc.collect()
+    return transformed
+
+
+def train_xgboosts(
+    Xs: List[np.array],
+    y: np.array,
+    xgb_args: Dict,
+    train_index: List[int],
+    val_index: List[int],
+    training_depth: int,
+    max_depth: int,
+    block_sizes: List[int],
+    prev_xgbs: List[SingleXGBoost],
+    save_xgb: bool,
+    save_path: str,
+) -> SingleXGBoost:
+    """
+    Trains 1 XGBoost given the Xs and the ys
+
+    :param Xs: the input data, list where the index corresponds to the depth of the input data
+    :param y: the targets
+    :param xgb_args: the arguments to create the xgb object
+    :param train_index: the training indices
+    :param val_index: the validation indices
+    :param training_depth: the training depth, controls the input data we choose/block_sizes
+    :param max_depth: the maximum depth of the pipeline
+    :param block_sizes: the block sizes to use to shape the targets to the correct shape
+    :param prev_xgbs: the previous xgbs, only used when we are training on residuals
+    :param save_xgb: whether to save the new trained xgb or not
+    :param save_path: where to save the xgb
+    :return
+    """
+    sxgb = SingleXGBoost(**xgb_args)
+
+    # we are training on the lowest depth
+    if training_depth == max_depth - 1:
+        y_reshaped = make_blocks(y, block_sizes[training_depth], calculate_mean=True)
+        N, H, W = y_reshaped.shape
+        y_train = y_reshaped[train_index].flatten()
+        y_val = y_reshaped[val_index].flatten()
+        feature = Xs[training_depth]
+        _, C = feature.shape
+        feature = feature.reshape(N, H, W, -1)
+        X_train = feature[train_index].reshape(-1, C)
+        X_val = feature[val_index].reshape(-1, C)
+    else:  # TODO: build in the functionality to train on residuals
+        X_train = None
+        y_train = None
+        X_val = None
+        y_val = None
+        print("Not implemented yet")
+
+    train = xgb.DMatrix(X_train, label=y_train)
+    val = xgb.DMatrix(X_val, label=y_val)
+    sxgb.fit(train, val)
+
+    if make_plots:
+        sxgb.plot_learning_curve(
+            eval_metric="rmse", path=save_path + f"lc_{training_depth}"
+        )
+    
+    if save_xgb:
+        with open(save_path + f"xgb_{training_depth}", "wb") as f: 
+            pickle.dump(sxgb, f)
+            f.close()
+
+    return sxgb
 
 def model(
     X: np.array,
@@ -332,7 +507,6 @@ def model(
     """Run the GDH model"""
 
     # FEATURE EXTRACTION
-    pdb.set_trace()
     pixelhop_units = []
 
     if load_pu:
@@ -401,14 +575,67 @@ def model(
         training_depth,
         load_rft,
         save_path,
-        make_plots
+        make_plots,
     )
 
-    # TODO: add LNTs + XGBoost prediction
+    lnt_procedure = model_args.get("lnts")
+    lnt_args = lnt_procedure.get("lnt_args")
+    n_rounds = lnt_procedure.get("n_rounds")
+    lnt = LNT(**lnt_args)
+    rfts = lnt_procedure.get("rfts")
+    n_selected = [rfts[k].get("n_selected") for k in rfts.keys()]
+    n_bins = [rfts[k].get("n_bins") for k in rfts.keys()]
+    rft_units = [RFT() for _ in rfts.keys()]
+
+    transformed = apply_lnts(
+        transformed,
+        y,
+        lnt,
+        rft_units,
+        train_index,
+        val_index,
+        n_rounds,
+        n_selected,
+        n_bins,
+        block_sizes,
+        training_depth,
+        False,  # TODO: figure out how we'd load this
+        save_path,
+        make_plots,
+    )
+
+    # we put all the features at the same depth/spatial resolution together 
+    features = DefaultDict(list)
+    for d in transformed: 
+        for k in d.keys():
+            features[k].append(d[k])
+    
+    for k in features.keys():
+        features[k] = np.concatenate(features[k], axis = -1)
+        
+    # SUPERVISED REGRESSION
+    xgboost_args = model_args.get("xgboost")
+    max_depth = model_args.get("model_depth")
+    prev_xgbs = []
+    sxgb = train_xgboosts(
+        features, 
+        y, 
+        xgboost_args, 
+        train_index, 
+        val_index, 
+        training_depth, 
+        max_depth,
+        block_sizes, 
+        prev_xgbs, 
+        True, 
+        save_path
+    )
+
     return None
 
 
 if __name__ == "__main__":
+    pdb.set_trace()
     cmd_args = parse_arguments()
     model_arch = cmd_args["model_arch"]
     n_samples = cmd_args["n_samples"]
@@ -438,11 +665,11 @@ if __name__ == "__main__":
 
     X_data, y_data = process_data(color_space, channel, n_samples)
     N = X_data.shape[0]
-    N_train = round(N * val_size)
+    N_val = round(N * val_size)
     indexes = np.arange(len(X_data))
     np.random.shuffle(indexes)
-    val_indexes = indexes[:N_train]
-    train_indexes = indexes[N_train:]
+    val_indexes = indexes[:N_val]
+    train_indexes = indexes[N_val:]
 
     model(
         X_data,
