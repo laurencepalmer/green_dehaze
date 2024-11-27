@@ -186,6 +186,7 @@ pixelhops:
         window: 3
         stride: 1
         method: reflect
+        scale: False # don't scale in the non cascaded pixelhop since we rescale using the resizing
     reduce_args:
       - pool: 2
         method: np.max
@@ -221,19 +222,98 @@ lnts:
     args: 
       lnt_lr: 0.05
       gpu_id: 
-  rfts:
-    rft_1: 
-      n_bins: 16
-      n_selected: 70
-    rft_2: 
-      n_bins: 16
-      n_selected: 175
-    rft_3: 
-      n_bins: 16
-      n_selected: 375
-    rft_4: 
-      n_bins: 16
-      n_selected: 425
+  rfts: # for these RFTs we have to specify how many we want to select per depth and round
+    0:
+      rft_1: 
+        n_bins: 16
+        n_selected: 70
+      rft_2: 
+        n_bins: 16
+        n_selected: 175
+      rft_3: 
+        n_bins: 16
+        n_selected: 375
+      rft_4: 
+        n_bins: 16
+        n_selected: 425
+    1:
+      rft_1: 
+        n_bins: 16
+        n_selected: 70
+      rft_2: 
+        n_bins: 16
+        n_selected: 175
+      rft_3: 
+        n_bins: 16
+        n_selected: 375
+      rft_4: 
+        n_bins: 16
+        n_selected: 425
+    2:
+      rft_1: 
+        n_bins: 16
+        n_selected: 70
+      rft_2: 
+        n_bins: 16
+        n_selected: 175
+      rft_3: 
+        n_bins: 16
+        n_selected: 375
+      rft_4: 
+        n_bins: 16
+        n_selected: 425
+    3:
+      rft_1: 
+        n_bins: 16
+        n_selected: 70
+      rft_2: 
+        n_bins: 16
+        n_selected: 175
+      rft_3: 
+        n_bins: 16
+        n_selected: 375
+      rft_4: 
+        n_bins: 16
+        n_selected: 425
+    4:
+      rft_1: 
+        n_bins: 16
+        n_selected: 70
+      rft_2: 
+        n_bins: 16
+        n_selected: 175
+      rft_3: 
+        n_bins: 16
+        n_selected: 375
+      rft_4: 
+        n_bins: 16
+        n_selected: 425
+    5:
+      rft_1: 
+        n_bins: 16
+        n_selected: 70
+      rft_2: 
+        n_bins: 16
+        n_selected: 175
+      rft_3: 
+        n_bins: 16
+        n_selected: 375
+      rft_4: 
+        n_bins: 16
+        n_selected: 425
+    6:
+      rft_1: 
+        n_bins: 16
+        n_selected: 70
+      rft_2: 
+        n_bins: 16
+        n_selected: 175
+      rft_3: 
+        n_bins: 16
+        n_selected: 375
+      rft_4: 
+        n_bins: 16
+        n_selected: 425
 block_sizes:
   - 1
   - 2
@@ -452,6 +532,98 @@ level_sizes:
   - 64
   - 32
   - 16
+xgboost:
+  params:
+    tree_method: hist
+    gpu_id: 
+    objective: reg:squarederror
+    max_depth: 4
+    learning_rate: 0.05
+    eval_metric: rmse
+  num_boost_round: 6000
+  early_stopping_rounds: 100
+---
+name: "noncascaded_pixelhop_depth_7_indoor"
+model_depth: 7
+cascaded: False
+feat_concat: True
+pixelhops: 
+  train_size: 0.5
+  pixelhop_1:
+    discard_threshold: 0 # discard threshold is set to 0 so we don't throw any kernels
+    saab_args:
+      - num_kernels:
+        thresh: 
+        use_bias: False
+    hop_args:
+      - pad: 1
+        window: 3
+        stride: 1
+        method: reflect
+    reduce_args:
+      - pool: 2
+        method: np.max
+        use_abs: True
+rfts: # these are set arbitrarily high to select all the features, noncascaded has significantly fewer features
+  rft_1:
+    n_bins: 16
+    n_selected: 10000
+  rft_2:
+    n_bins: 16
+    n_selected: 10000
+  rft_3:
+    n_bins: 16
+    n_selected: 10000
+  rft_4:
+    n_bins: 16
+    n_selected: 10000
+  rft_5:
+    n_bins: 16
+    n_selected: 10000
+  rft_6:
+    n_bins: 16
+    n_selected: 10000
+  rft_7:
+    n_bins: 16
+    n_selected: 10000
+lnts:
+  type: compound
+  n_rounds: 4
+  lnt_args:
+    num_tree: 400
+    depth: 2
+    args: 
+      lnt_lr: 0.05
+      gpu_id: 
+  rfts:
+    rft_1: 
+      n_bins: 16
+      n_selected: 125
+    rft_2: 
+      n_bins: 16
+      n_selected: 225
+    rft_3: 
+      n_bins: 16
+      n_selected: 325
+    rft_4: 
+      n_bins: 16
+      n_selected: 425
+block_sizes:
+  - 1
+  - 2
+  - 4
+  - 8
+  - 16
+  - 32
+  - 64
+level_sizes: 
+  - 128
+  - 64
+  - 32
+  - 16
+  - 8
+  - 4
+  - 2
 xgboost:
   params:
     tree_method: hist
