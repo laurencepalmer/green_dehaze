@@ -63,7 +63,6 @@ class LAG:
             kmean.fit(subset_images)
             labels = kmean.labels_
             centroids = kmean.cluster_centers_
-            pdb.set_trace()
 
             # assign and record, labels, centroids
             all_class_labels[i] = np.unique(labels) + (i * num_classes)
