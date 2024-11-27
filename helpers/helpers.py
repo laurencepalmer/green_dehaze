@@ -9,6 +9,7 @@ import time
 import pdb
 from typing import *
 from skimage.util import view_as_windows
+from sklearn.preprocessing import MinMaxScaler
 import gc
 import matplotlib.pyplot as plt
 
@@ -274,7 +275,7 @@ def feature_concat(
     return concated
 
 def make_blocks(
-        X: np.array, block: int, calculate_mean: bool = False
+        X: np.array, block: int, calculate_mean: bool = False, scale: bool = False
     ) -> np.array:
         """
         Makes blocks of the specified block sizes, this helps with creating the
@@ -285,12 +286,33 @@ def make_blocks(
         :param X: the input array, should be size (N, H, W)
         :param block: the block size to calculate
         :param calculate_mean: whether to compress down with mean
+        :param scale
         :return blocks: the resulting blocks
         """
+
         N, H, W = X.shape
         blocks = X.reshape(-1, H // block, block, W // block, block)
         blocks = blocks.transpose((0, 1, 3, 2, 4))
+
+        if scale: # TODO: when block sizes are 1 then we have to take it across the entire image
+            # need floats now if we scale
+            blocks = blocks.astype("float32")
+            scaler = MinMaxScaler()
+            for i in range(blocks.shape[0]): 
+                for j in range(blocks.shape[1]):
+                    for k in range(blocks.shape[2]):
+                        blocks[i][j][k] = scaler.fit_transform(blocks[i][j][k].reshape(-1, 1)).reshape(block, block)
+
         if calculate_mean:
             blocks = np.mean(blocks, axis=(3, 4))
 
         return blocks
+
+def size_up(X: np.array, size: Tuple[int, int], scheme: int = cv2.INTER_LANCZOS4) -> np.array:
+    """Sizes up an image using cv2"""
+    X_resize = []
+    for i in range(len(X)):
+        X_resize.append(
+            cv2.resize(X[i], size, interpolation = scheme)
+        )
+    return np.array(X_resize)
