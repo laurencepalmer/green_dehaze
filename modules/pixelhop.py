@@ -12,7 +12,7 @@ from sklearn import datasets
 from skimage.measure import block_reduce
 from skimage.util import view_as_windows
 from .saabtransform import SaabTransform
-
+from sklearn.preprocessing import MinMaxScaler
 
 class PixelHop:
     """
@@ -56,6 +56,7 @@ class PixelHop:
         stride: int = 1,
         window: int = 1,
         method: str = "reflect",
+        scale: bool = True
     ) -> np.array:
         """
         Perform the PixelHop on set of images, get the neighbors and reshape
@@ -63,6 +64,10 @@ class PixelHop:
 
         :param: X: set of images
         :param pad: pad images, default with reflect
+        :param stride: the stride of the kernel 
+        :param window: the window size of the kernel 
+        :param method: the padding method to use, default to reflect 
+        :param scale: whether to min-max scale the input data within the kernel size
         :return: hopped: set of images with neighor pixels in channels
 
         Does the order that we include the elements matter? The set difference
@@ -70,12 +75,25 @@ class PixelHop:
         """
 
         N, h, w, c = X.shape
+
         if pad:
             X = np.pad(X, ((0, 0), (pad, pad), (pad, pad), (0, 0)), mode=method)
 
         X = view_as_windows(X, (1, window, window, c), (1, stride, stride, c))
 
-        return X.reshape(N, h, w, -1)
+        X = X.reshape(N, h, w, -1)
+
+        if scale:
+            # need floats now if we scale
+            print("Scaling in Pixelhop")
+            X = X.astype("float32")
+            scaler = MinMaxScaler()
+            for i in range(X.shape[0]): 
+                for j in range(X.shape[1]):
+                    for k in range(X.shape[2]):
+                        X[i][j][k] = scaler.fit_transform(X[i][j][k].reshape(-1, 1)).squeeze()
+
+        return X
 
     def reduce(
         self, X: np.array, pool: int, method: Callable = np.max, use_abs: bool = True
@@ -91,6 +109,17 @@ class PixelHop:
         """
         if use_abs:
             X = np.absolute(X)
+
+        if type(method) == str:
+            if method == "np.max":
+                method = np.max
+            elif method == "np.min":
+                method = np.min
+            elif method == "np.mean":
+                method = np.mean
+            else:
+                raise ValueError("Method is not a valid method, choose from np.min, np.max, np.mean")
+        
         out = block_reduce(X, (1, pool, pool, 1), method)
         return out
 
@@ -221,7 +250,7 @@ class PixelHop:
         N, h, w, c = X.shape
         saab = SaabTransform(**init_saab_args)
         saab.fit(X)
-        _ = saab.discard(self.discard_threshold)
+        # _ = saab.discard(self.discard_threshold) uncomment this when we do c/w Saab
         X = saab.transform(X)
         self.cw_layers["layer_0"].append(saab)
         print(f"Layer 0 output {X.shape}")
@@ -238,7 +267,7 @@ class PixelHop:
         print(f"Done fitting")
         self.trained = True
 
-    def transform(self, X: np.array) -> np.array:
+    def transform(self, X: np.array) -> dict:
         """
         Perform the c/w saab transform on the kernels that were fit
 
