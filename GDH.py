@@ -80,7 +80,7 @@ def process_data(
     data_args = {
         "color_transform": {"colorspace": colorspace},
     }
-    X, y = get_data(data_args, DATADIR_PATH, CLEARDIR_NAME, HAZYDIR_NAME)
+    X, y = get_data_batched(DATADIR_PATH, CLEARDIR_NAME, HAZYDIR_NAME)
     # y channel
     X_1, y_1 = split_channels(X, y, 0)
     # u channel

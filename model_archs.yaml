@@ -221,7 +221,7 @@ lnts:
     depth: 2
     args: 
       lnt_lr: 0.05
-      gpu_id: 
+      gpu_id: 0
   rfts: # for these RFTs we have to specify how many we want to select per depth and round
     0:
       rft_1: 
@@ -333,7 +333,7 @@ level_sizes:
 xgboost:
   params:
     tree_method: hist
-    gpu_id: 
+    gpu_id: 0
     objective: reg:squarederror
     max_depth: 4
     learning_rate: 0.05
@@ -508,7 +508,7 @@ lnts:
     depth: 2
     args: 
       lnt_lr: 0.05
-      gpu_id: 
+      gpu_id: 0
   rfts:
     rft_1: 
       n_bins: 16
@@ -535,7 +535,7 @@ level_sizes:
 xgboost:
   params:
     tree_method: hist
-    gpu_id: 
+    gpu_id: 0
     objective: reg:squarederror
     max_depth: 4
     learning_rate: 0.05
@@ -594,7 +594,7 @@ lnts:
     depth: 2
     args: 
       lnt_lr: 0.05
-      gpu_id: 
+      gpu_id: 0
   rfts:
     rft_1: 
       n_bins: 16

@@ -7,11 +7,11 @@ import random
 import os
 import time
 import pdb
+import torch
 from typing import *
 from skimage.util import view_as_windows
 from sklearn.preprocessing import MinMaxScaler
 import gc
-import matplotlib.pyplot as plt
 
 class HazeDataset:
     """
@@ -39,8 +39,8 @@ class HazeDataset:
         self.clear_dataset_name = clear_dataset
         self.hazy_dataset_name = hazy_dataset
 
+    @staticmethod
     def resize(
-        self,
         img: np.array,
         width: int,
         height: int,
@@ -58,8 +58,8 @@ class HazeDataset:
         resized = cv2.resize(img, (width, height), method)
         return resized
 
+    @staticmethod
     def pad(
-        self,
         img: np.array,
         num_pad: int = 1,
         pad_method: str = "reflect",
@@ -80,8 +80,9 @@ class HazeDataset:
             padded = np.pad(img, ((num_pad, num_pad), (num_pad, num_pad), (0,0)), mode=pad_method)
         return padded
 
+    @staticmethod
     def patch(
-        self, imgs: Tuple[np.array, np.array], center_h: int = None, center_w: int = None, patch_size: int = 64
+        imgs: Tuple[np.array, np.array], center_h: int = None, center_w: int = None, patch_size: int = 64
     ) -> Tuple[np.array, np.array]:
         """
         Returns a patch of the image pair, same patch in the hazy vs non-hazy, decides center based on 
@@ -110,7 +111,8 @@ class HazeDataset:
         ]
         return clear_patch, hazy_patch
 
-    def color_transform(self, img: np.array, colorspace) -> np.array:
+    @staticmethod
+    def color_transform(img: np.array, colorspace) -> np.array:
         """
         Transform color space
         """
@@ -149,7 +151,7 @@ class HazeDataset:
 
         return data
     
-    def import_images_custom(self) -> List[Tuple[np.array, np.array]]:
+    def import_images_custom(self, batch: bool = False) -> List[Tuple[np.array, np.array]]:
         """Helper to import images that have already been modified"""
         full_clear_path = self.dataset_folder + self.clear_dataset_name
         full_haze_path = self.dataset_folder + self.hazy_dataset_name
@@ -163,11 +165,14 @@ class HazeDataset:
         for clear, hazy in pairs:
             clear_path = f"{full_clear_path}/{clear}"
             haze_path = f"{full_haze_path}/{hazy}"
-            clear_image = cv2.imread(clear_path)
-            hazy_image = cv2.imread(haze_path)
-            data.append((clear_image, hazy_image))
+
+            if batch:
+                data.append((clear_path, haze_path))
+            else:
+                data.append((cv2.imread(clear_path), cv2.imread(haze_path)))
         
         return data
+
 
     def train_test_split(
         self, data: List[Tuple[np.array, np.array]], n_train: int
@@ -203,25 +208,7 @@ def get_data(args: Dict[str, dict], datadir_path: str, cleardir_name: str, hazyd
     data_augmented = {"clear": [], "hazy": []}
     # resize and pad if needed
     for clear, hazy in data:
-
-        # color transform
-        if args.get("color_transform"):
-            clear = ds.color_transform(clear, **args["color_transform"])
-            hazy = ds.color_transform(hazy, **args["color_transform"])
-
-        # resizing
-        if args.get("resize"):
-            clear = ds.resize(clear, **args["resize"])
-            hazy = ds.resize(hazy, **args["resize"])
-
-        # patches 
-        if args.get("patches"):
-            clear, hazy = ds.patch((clear, hazy), **args["patches"])
-
-        # only pad the hazy images
-        if args.get("pad"):
-            hazy = ds.pad(hazy, **args["pad"])
-
+        clear, hazy = augment_image(clear, hazy, args)
         
         data_augmented["clear"].append(clear)
         data_augmented["hazy"].append(hazy)
@@ -230,10 +217,76 @@ def get_data(args: Dict[str, dict], datadir_path: str, cleardir_name: str, hazyd
     y = np.array(data_augmented["clear"])
     return X, y
 
+def get_data_batched(args: Dict[str, dict], datadir_path: str, cleardir_name: str, hazydir_name: str) -> Tuple[str, str]:
+    """Returns the data but just the path to find them"""
+    ds = HazeDataset(datadir_path, cleardir_name, hazydir_name)
+    data = ds.import_images_custom(batch = True)
+    return data
+
+def get_batch(data: Tuple[str, str], args: Dict[str, dict]) -> List[Tuple[np.array, np.array]]:
+    """Gets the images in a given batch"""
+    clear = []
+    hazy = []
+    for clear, hazy in data: 
+        clear_img = cv2.imread(clear)
+        hazy_img = cv2.imread(hazy)
+        clear_img, hazy_img = augment_image(clear_img, hazy_img, args)
+
+        clear.append(clear_img)
+        hazy.append(hazy_img)
+
+    clear = np.array(clear)
+    hazy = np.array(hazy)
+    
+    channel = args.get("channel")
+
+    if channel == "Y" or channel == "R":
+        X_data, y_data = split_channels(hazy, clear, 0)
+    elif channel == "U" or channel == "G":
+        X_data, y_data = split_channels(hazy, clear, 1)
+    elif channel == "V" or channel == "B":
+        X_data, y_data = split_channels(hazy, clear, 2)
+    
+    clear = None
+    hazy = None
+    gc.collect()
+    return X_data, y_data
+    
+
+def augment_image(clear: np.array, hazy: np.array, args: Dict[str, str]) -> Tuple[np.array, np.array]:
+    """Augment a single pair of images"""
+    # color transform
+    if args.get("color_transform"):
+        clear = HazeDataset.color_transform(clear, **args["color_transform"])
+        hazy = HazeDataset.color_transform(hazy, **args["color_transform"])
+
+    # resizing
+    if args.get("resize"):
+        clear = HazeDataset.resize(clear, **args["resize"])
+        hazy = HazeDataset.resize(hazy, **args["resize"])
+
+    # patches 
+    if args.get("patches"):
+        clear, hazy = HazeDataset.patch((clear, hazy), **args["patches"])
+
+    # only pad the hazy images
+    if args.get("pad"):
+        hazy = HazeDataset.pad(hazy, **args["pad"])
+
+    return clear, hazy
+
 def set_seed(seed: int):
     """Sets the random seed for the experiment"""
     np.random.seed(seed)
     random.seed(seed)
+
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)  
+        torch.cuda.manual_seed_all(seed) 
+        torch.backends.cudnn.deterministic = True 
+        torch.backends.cudnn.benchmark = False 
+
 
 def split_channels(X: np.array, y: np.array, c: int = 0) -> np.array:
     """Splits the channels of the input image (N, h, w, c)"""
