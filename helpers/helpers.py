@@ -208,7 +208,8 @@ def get_data(args: Dict[str, dict], datadir_path: str, cleardir_name: str, hazyd
     data_augmented = {"clear": [], "hazy": []}
     # resize and pad if needed
     for clear, hazy in data:
-        clear, hazy = augment_image(clear, hazy, args)
+        clear = augment_image(clear, args)
+        hazy = augment_image(hazy, args)
         
         data_augmented["clear"].append(clear)
         data_augmented["hazy"].append(hazy)
@@ -217,63 +218,60 @@ def get_data(args: Dict[str, dict], datadir_path: str, cleardir_name: str, hazyd
     y = np.array(data_augmented["clear"])
     return X, y
 
-def get_data_batched(args: Dict[str, dict], datadir_path: str, cleardir_name: str, hazydir_name: str) -> Tuple[str, str]:
+def get_data_batched(datadir_path: str, cleardir_name: str, hazydir_name: str) -> Tuple[List[str], List[str]]:
     """Returns the data but just the path to find them"""
     ds = HazeDataset(datadir_path, cleardir_name, hazydir_name)
     data = ds.import_images_custom(batch = True)
-    return data
-
-def get_batch(data: Tuple[str, str], args: Dict[str, dict]) -> List[Tuple[np.array, np.array]]:
-    """Gets the images in a given batch"""
     clear = []
     hazy = []
-    for clear, hazy in data: 
-        clear_img = cv2.imread(clear)
-        hazy_img = cv2.imread(hazy)
-        clear_img, hazy_img = augment_image(clear_img, hazy_img, args)
 
-        clear.append(clear_img)
-        hazy.append(hazy_img)
+    for clear_path, hazy_path in data:
+        clear.append(clear_path)
+        hazy.append(hazy_path)
+    return hazy, clear
 
-    clear = np.array(clear)
-    hazy = np.array(hazy)
+def get_batch(X: List[str], to_get: np.array, args: Dict[str, dict]) -> Tuple[np.array, np.array]:
+    """Gets the images in a given batch"""
+    data = []
+    for ind in to_get: 
+        img = cv2.imread(X[ind])
+        img = augment_image(img, args)
+        data.append(img)
+
+    data = np.array(data)
     
     channel = args.get("channel")
 
     if channel == "Y" or channel == "R":
-        X_data, y_data = split_channels(hazy, clear, 0)
+        data = split_channels(data, 0)
     elif channel == "U" or channel == "G":
-        X_data, y_data = split_channels(hazy, clear, 1)
+        data = split_channels(data, 1)
     elif channel == "V" or channel == "B":
-        X_data, y_data = split_channels(hazy, clear, 2)
+        data = split_channels(data, 2)
     
-    clear = None
-    hazy = None
+    data = data.squeeze(-1)
     gc.collect()
-    return X_data, y_data
+    return data
     
-
-def augment_image(clear: np.array, hazy: np.array, args: Dict[str, str]) -> Tuple[np.array, np.array]:
-    """Augment a single pair of images"""
+def augment_image(img: np.array, args: Dict[str, str]) -> Tuple[np.array, np.array]:
+    """Augment a single image"""
     # color transform
     if args.get("color_transform"):
-        clear = HazeDataset.color_transform(clear, **args["color_transform"])
-        hazy = HazeDataset.color_transform(hazy, **args["color_transform"])
+        img = HazeDataset.color_transform(img, args["color_transform"])
 
     # resizing
     if args.get("resize"):
-        clear = HazeDataset.resize(clear, **args["resize"])
-        hazy = HazeDataset.resize(hazy, **args["resize"])
+        img = HazeDataset.resize(img, **args["resize"])
 
-    # patches 
+    # patches TODO: Make the pair an optional argument
     if args.get("patches"):
-        clear, hazy = HazeDataset.patch((clear, hazy), **args["patches"])
+        img = HazeDataset.patch((img, img), **args["patches"])
 
     # only pad the hazy images
     if args.get("pad"):
-        hazy = HazeDataset.pad(hazy, **args["pad"])
+        img = HazeDataset.pad(img, **args["pad"])
 
-    return clear, hazy
+    return img
 
 def set_seed(seed: int):
     """Sets the random seed for the experiment"""
@@ -288,11 +286,10 @@ def set_seed(seed: int):
         torch.backends.cudnn.benchmark = False 
 
 
-def split_channels(X: np.array, y: np.array, c: int = 0) -> np.array:
+def split_channels(X: np.array, c: int = 0) -> np.array:
     """Splits the channels of the input image (N, h, w, c)"""
     X_c = np.expand_dims(X[:, :, :, c], axis = 3)
-    y_c = np.expand_dims(y[:, :, :, c], axis = 3)
-    return X_c, y_c
+    return X_c
 
 def feature_concat(
         Xs: Dict[int, np.array], 

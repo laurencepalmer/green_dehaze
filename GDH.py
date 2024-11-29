@@ -67,45 +67,15 @@ def get_model_args(file_path: str, model_arch: str) -> dict:
 
 
 def process_data(
-    color_space: str, channel: str, n_samples: int
+    color_space: str, n_samples: int
 ) -> Tuple[np.array, np.array]:
-    """Processes data based on args given"""
-
-    if color_space == "YUV":
-        colorspace = cv2.COLOR_BGR2YUV
-    elif color_space == "RGB":
-        colorspace = cv2.COLOR_BGR2RGB
-
-    # other options as well, look at helpers
-    data_args = {
-        "color_transform": {"colorspace": colorspace},
-    }
+    """Just gets the path to the data"""
     X, y = get_data_batched(DATADIR_PATH, CLEARDIR_NAME, HAZYDIR_NAME)
-    # y channel
-    X_1, y_1 = split_channels(X, y, 0)
-    # u channel
-    X_2, y_2 = split_channels(X, y, 1)
-    # v channel
-    X_3, y_3 = split_channels(X, y, 2)
-
-    if channel == "Y" or channel == "R":
-        X_data = X_1
-        y_data = y_1
-    elif channel == "U" or channel == "G":
-        X_data = X_2
-        y_data = y_2
-    elif channel == "V" or channel == "B":
-        X_data = X_3
-        y_data = y_3
-
-    X_data = X_data[:n_samples]
-    y_data = y_data[:n_samples].squeeze(-1)
-    gc.collect()
-    return X_data, y_data
+    return X[:n_samples], y[:n_samples]
 
 
 def apply_pixelhops_noncascaded(
-    X: np.array,
+    X: List[str],
     train_size: float, 
     model_depth: int,
     block_sizes: List[int],
@@ -113,6 +83,7 @@ def apply_pixelhops_noncascaded(
     trained_pixelhop_units: List[Dict[int, PixelHop]],
     training_depth: int,
     save_path: str,
+    model_args: Dict
 ) -> List[Dict[int, np.array]]:
     """
     Applies the pixelhop units in a non-cascaded fashion by
@@ -130,10 +101,7 @@ def apply_pixelhops_noncascaded(
     indexes = np.arange(len(X))
     np.random.shuffle(indexes)
     N = round(len(X) * train_size)
-    X_train = X[indexes[:N]]
-    X_train = X_train.squeeze(-1)
-    X = X.squeeze(-1)
-    gc.collect()
+    X_train = get_batch(X, indexes[:N], model_args)
 
     new_pixelhop_units = [{}]*len(pixelhop_units)
     for i in range(model_depth):
@@ -150,6 +118,10 @@ def apply_pixelhops_noncascaded(
     for i, trained_pu in enumerate(trained_pixelhop_units):
         for j in trained_pu.keys():
             new_pixelhop_units[i][j] = trained_pu[j]
+
+    X_train = None
+    gc.collect()
+    X = get_batch(X, np.arange(len(X)), model_args)
 
     # tranform the input data
     transformed = [{}] * len(pixelhop_units)
@@ -208,9 +180,9 @@ def apply_pixelhops_cascaded(
 
 def apply_rfts(
     Xs: List[Dict[int, np.array]],
-    y: np.array,
-    train_index: List[int],
-    val_index: List[int],
+    y: List[str],
+    train_index: np.array,
+    val_index: np.array,
     rft_units: List[Dict[int, RFT]],
     block_sizes: List[int],
     n_bins: List[int],
@@ -218,6 +190,7 @@ def apply_rfts(
     training_depth: int,
     save_path: str,
     make_plots: bool,
+    model_args: Dict
 ) -> List[Dict[int, np.array]]:
     """
     Applies the RFTs to the given data
@@ -234,6 +207,7 @@ def apply_rfts(
     :param save_path: the path to save the RFTs if they weren't loaded
     :return transformed: output of fitting and transforming based on the rft arguments given
     """
+    y = get_batch(y, np.arange(len(y)), model_args)
     transformed = []
     new_rft_units = []
     print(f"{'='*50} Fitting RFTs")
@@ -275,6 +249,7 @@ def apply_rfts(
             f.close()
     new_rft_units = None
     print(f"{'='*50} Done fitting RFTs")
+    y = None
     gc.collect()
     return transformed
 
@@ -340,11 +315,11 @@ def plot_rft_train_val(rft: RFT, save_path: str, title: str):
 
 def apply_lnts(
     Xs: List[Dict[int, np.array]],
-    y: np.array,
+    y: List[str],
     lnt: Dict[int, Dict[int, LNT]],
     rfts: Dict[int, Dict[int, RFT]],
-    train_index: List[int],
-    val_index: List[int],
+    train_index: np.array,
+    val_index: np.array,
     n_rounds: int,
     n_selected: Dict[int, List[int]],
     n_bins: Dict[int, List[int]],
@@ -371,6 +346,8 @@ def apply_lnts(
     :param make_plots: whether to plot the compound rft procedures between the LNTs
     :return transformed: the transformed features for a given depth
     """
+    y = get_batch(y, np.arange(len(y)), model_args)
+
     transformed = []
     fitted_lnts = []
     fitted_rfts = []
@@ -498,7 +475,7 @@ def generate_residuals(Xs: Dict[int, np.array], y: np.array, prev_xgbs: Dict[int
 
 def train_xgboosts(
     Xs: Dict[int, np.array],
-    y: np.array,
+    y: List[str],
     xgb_args: Dict,
     train_index: List[int],
     val_index: List[int],
@@ -509,6 +486,7 @@ def train_xgboosts(
     prev_xgbs: Dict[int, SingleXGBoost],
     save_xgb: bool,
     save_path: str,
+    model_args: str
 ) -> SingleXGBoost:
     """
     Trains 1 XGBoost given the Xs and the ys
@@ -525,9 +503,11 @@ def train_xgboosts(
     :param prev_xgbs: the previous xgbs, only used when we are training on residuals
     :param save_xgb: whether to save the new trained xgb or not
     :param save_path: where to save the xgb
+    :param model_args: the model arguments
     :return
     """
     sxgb = SingleXGBoost(**xgb_args)
+    y = get_batch(y, np.arange(len(y)), model_args)
 
     # we are training on the lowest depth
     if training_depth == max_depth - 1:
@@ -568,10 +548,10 @@ def train_xgboosts(
     return sxgb
 
 def model(
-    X: np.array,
-    y: np.array,
-    train_index: List[int],
-    val_index: List[int],
+    X: List[str],
+    y: List[str],
+    train_index: np.array,
+    val_index: np.array,
     model_args: dict,
     training_depth: int,
     save_path: str,
@@ -620,6 +600,7 @@ def model(
             trained_pixelhop_units,
             training_depth,
             save_path,
+            model_args
         )
 
     feat_concat = model_args.get("feat_concat")
@@ -666,6 +647,7 @@ def model(
         training_depth,
         save_path,
         make_plots,
+        model_args
     )
 
     # get the LNT arguments
@@ -758,7 +740,8 @@ def model(
         level_sizes,
         prev_xgbs, 
         True, 
-        save_path
+        save_path,
+        model_args
     )
 
     return None
@@ -790,13 +773,19 @@ if __name__ == "__main__":
     for arg in cmd_args.keys():
         model_args[arg] = cmd_args[arg]
 
+    if color_space == "YUV":
+        model_args["color_transform"]= cv2.COLOR_BGR2YUV
+    elif color_space == "RGB":
+        model_args["color_transform"] = cv2.COLOR_BGR2RGB
+
+
     x = os.mkdir(model_path)
     with open(f"{model_path}model_args", "wb") as f:
         pickle.dump(model_args, f)
         f.close()
 
-    X_data, y_data = process_data(color_space, channel, n_samples)
-    N = X_data.shape[0]
+    X_data, y_data = process_data(color_space, n_samples)
+    N = len(X_data)
     N_val = round(N * val_size)
     indexes = np.arange(len(X_data))
     np.random.shuffle(indexes)
