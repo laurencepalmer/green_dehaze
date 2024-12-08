@@ -15,6 +15,9 @@ class SingleXGBoost:
 
     def fit(self, DMatrix_train, DMatrix_val, *args, **kwargs):
         self.evals_result = {}
+
+        
+
         watchlist = [(DMatrix_train, "train"), (DMatrix_val, "val")]
         self.bst = xgb.train(
             self.params,

@@ -53,30 +53,37 @@ pixelhops:
         window: 3
         stride: 1
         method: reflect
+        scale: False
       - pad: 1
         window: 3
         stride: 1
         method: reflect
+        scale: False
       - pad: 1
         window: 3
         stride: 1
         method: reflect
+        scale: False
       - pad: 1
         window: 3
         stride: 1
         method: reflect
+        scale: False
       - pad: 1
         window: 3
         stride: 1
         method: reflect
+        scale: False
       - pad: 1
         window: 3
         stride: 1
         method: reflect
+        scale: False
       - pad: 1
         window: 3
         stride: 1
         method: reflect
+        scale: False
     reduce_args:
       - pool: 2
         method: np.max
@@ -215,13 +222,13 @@ rfts: # these are set arbitrarily high to select all the features, noncascaded h
     n_selected: 10000
 lnts:
   type: compound
-  n_rounds: 4
+  n_rounds: 2
   lnt_args:
     num_tree: 400
     depth: 2
     args: 
       lnt_lr: 0.05
-      gpu_id: 0
+      gpu_id:
   rfts: # for these RFTs we have to specify how many we want to select per depth and round
     0:
       rft_1: 
@@ -230,12 +237,6 @@ lnts:
       rft_2: 
         n_bins: 16
         n_selected: 175
-      rft_3: 
-        n_bins: 16
-        n_selected: 375
-      rft_4: 
-        n_bins: 16
-        n_selected: 425
     1:
       rft_1: 
         n_bins: 16
@@ -243,12 +244,6 @@ lnts:
       rft_2: 
         n_bins: 16
         n_selected: 175
-      rft_3: 
-        n_bins: 16
-        n_selected: 375
-      rft_4: 
-        n_bins: 16
-        n_selected: 425
     2:
       rft_1: 
         n_bins: 16
@@ -256,12 +251,6 @@ lnts:
       rft_2: 
         n_bins: 16
         n_selected: 175
-      rft_3: 
-        n_bins: 16
-        n_selected: 375
-      rft_4: 
-        n_bins: 16
-        n_selected: 425
     3:
       rft_1: 
         n_bins: 16
@@ -269,12 +258,6 @@ lnts:
       rft_2: 
         n_bins: 16
         n_selected: 175
-      rft_3: 
-        n_bins: 16
-        n_selected: 375
-      rft_4: 
-        n_bins: 16
-        n_selected: 425
     4:
       rft_1: 
         n_bins: 16
@@ -282,12 +265,6 @@ lnts:
       rft_2: 
         n_bins: 16
         n_selected: 175
-      rft_3: 
-        n_bins: 16
-        n_selected: 375
-      rft_4: 
-        n_bins: 16
-        n_selected: 425
     5:
       rft_1: 
         n_bins: 16
@@ -295,12 +272,6 @@ lnts:
       rft_2: 
         n_bins: 16
         n_selected: 175
-      rft_3: 
-        n_bins: 16
-        n_selected: 375
-      rft_4: 
-        n_bins: 16
-        n_selected: 425
     6:
       rft_1: 
         n_bins: 16
@@ -308,12 +279,6 @@ lnts:
       rft_2: 
         n_bins: 16
         n_selected: 175
-      rft_3: 
-        n_bins: 16
-        n_selected: 375
-      rft_4: 
-        n_bins: 16
-        n_selected: 425
 block_sizes:
   - 1
   - 2
@@ -333,7 +298,7 @@ level_sizes:
 xgboost:
   params:
     tree_method: hist
-    gpu_id: 0
+    gpu_id:
     objective: reg:squarederror
     max_depth: 4
     learning_rate: 0.05
@@ -508,7 +473,7 @@ lnts:
     depth: 2
     args: 
       lnt_lr: 0.05
-      gpu_id: 0
+      gpu_id:
   rfts:
     rft_1: 
       n_bins: 16
@@ -535,7 +500,7 @@ level_sizes:
 xgboost:
   params:
     tree_method: hist
-    gpu_id: 0
+    gpu_id:
     objective: reg:squarederror
     max_depth: 4
     learning_rate: 0.05
@@ -594,7 +559,7 @@ lnts:
     depth: 2
     args: 
       lnt_lr: 0.05
-      gpu_id: 0
+      gpu_id:
   rfts:
     rft_1: 
       n_bins: 16

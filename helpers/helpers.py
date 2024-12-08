@@ -8,6 +8,7 @@ import os
 import time
 import pdb
 import torch
+import pickle
 from typing import *
 from skimage.util import view_as_windows
 from sklearn.preprocessing import MinMaxScaler
@@ -297,7 +298,7 @@ def feature_concat(
         pad: int = 1,
         stride: int = 1,
         window: int = 3,
-        method: str = "reflect"
+        method: str = "reflect",
     ) -> dict:
     """
     Feature concatenation, decides how many neighboring pixels features to concatentate to the spectral dimension of a pixel.
@@ -309,6 +310,7 @@ def feature_concat(
     :param stride: step size for the window
     :param window: size of the window, window x window = # of neighbors for feature concatentation 
     :param method: what method to use for the padding
+    :return concated: all of the concatenated features
     """
     concated = {}
     for i in Xs.keys():
@@ -320,9 +322,35 @@ def feature_concat(
             feature = view_as_windows(feature, (1, window, window, c), (1, stride, stride, c))
             feature = feature.reshape(N, h, w, -1)
             print(f"Resulting feature shape {feature.shape}")
+
             concated[i] = feature
 
     return concated
+
+def feature_concat_one_step(
+    X: np.array, 
+    pad: int = 1,
+    stride: int = 1, 
+    window: int = 3, 
+    method: str = "reflect"
+) -> dict:
+    """
+    Feature concatenation, but one step rather than for the full set
+
+    :param X: the input data
+    :param pad: how much padding to use 
+    :param stride: step size for the window 
+    :param window: size of the window
+    :param method: what method to use for the padding
+    """
+    N, h, w, c = X.shape
+    print(f"Concatenating feature with dimension {X.shape}")
+    N, h, w, c = X.shape
+    X = np.pad(X, ((0, 0), (pad, pad), (pad, pad), (0, 0)), mode=method)
+    X = view_as_windows(X, (1, window, window, c), (1, stride, stride, c))
+    X = X.reshape(N, h, w, -1)
+    print(f"Resulting feature shape {X.shape}")
+    return X
 
 def make_blocks(
         X: np.array, block: int, calculate_mean: bool = False, scale: bool = False
@@ -366,3 +394,10 @@ def size_up(X: np.array, size: Tuple[int, int], scheme: int = cv2.INTER_LANCZOS4
             cv2.resize(X[i], size, interpolation = scheme)
         )
     return np.array(X_resize)
+
+
+def load_feature(path: str) -> np.array:
+    with open(path, "rb") as f:
+        r = pickle.load(f)
+        f.close()
+    return r

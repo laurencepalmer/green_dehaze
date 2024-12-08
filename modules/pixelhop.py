@@ -250,7 +250,7 @@ class PixelHop:
         N, h, w, c = X.shape
         saab = SaabTransform(**init_saab_args)
         saab.fit(X)
-        # _ = saab.discard(self.discard_threshold) uncomment this when we do c/w Saab
+        _ = saab.discard(self.discard_threshold) # uncomment this when we do c/w Saab
         X = saab.transform(X)
         self.cw_layers["layer_0"].append(saab)
         print(f"Layer 0 output {X.shape}")
