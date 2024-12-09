@@ -130,26 +130,63 @@ rfts:
     n_selected: 81
 lnts:
   type: compound
-  n_rounds: 4
+  n_rounds: 2
   lnt_args:
     num_tree: 400
     depth: 2
     args: 
       lnt_lr: 0.05
-      gpu_id: 
-  rfts:
-    rft_1: 
-      n_bins: 16
-      n_selected: 70
-    rft_2: 
-      n_bins: 16
-      n_selected: 175
-    rft_3: 
-      n_bins: 16
-      n_selected: 375
-    rft_4: 
-      n_bins: 16
-      n_selected: 425
+      gpu_id:
+  rfts: # for these RFTs we have to specify how many we want to select per depth and round
+    0:
+      rft_1: 
+        n_bins: 16
+        n_selected: 70
+      rft_2: 
+        n_bins: 16
+        n_selected: 175
+    1:
+      rft_1: 
+        n_bins: 16
+        n_selected: 70
+      rft_2: 
+        n_bins: 16
+        n_selected: 175
+    2:
+      rft_1: 
+        n_bins: 16
+        n_selected: 70
+      rft_2: 
+        n_bins: 16
+        n_selected: 175
+    3:
+      rft_1: 
+        n_bins: 16
+        n_selected: 70
+      rft_2: 
+        n_bins: 16
+        n_selected: 175
+    4:
+      rft_1: 
+        n_bins: 16
+        n_selected: 70
+      rft_2: 
+        n_bins: 16
+        n_selected: 175
+    5:
+      rft_1: 
+        n_bins: 16
+        n_selected: 70
+      rft_2: 
+        n_bins: 16
+        n_selected: 175
+    6:
+      rft_1: 
+        n_bins: 16
+        n_selected: 70
+      rft_2: 
+        n_bins: 16
+        n_selected: 175
 block_sizes:
   - 1
   - 2

@@ -157,21 +157,24 @@ def apply_pixelhops_noncascaded(
 
 
 def apply_pixelhops_cascaded(
-    X: np.array, train_size: float, batch_size: float, pixelhop_units: List[PixelHop], load_pu: bool, save_path: str, model_args: Dict
+    X: np.array, y, train_size: float, batch_size: float, pixelhop_units: List[PixelHop], load_pu: bool, save_path: str, model_args: Dict
 ) -> List[Dict[int, np.array]]:
     """
-    Applies the Pixelhops in cascaded manner, i.e. no resizing done, but rather pooling operations
+    Applies the Pixelhops in cascaded manner in batches, i.e. no resizing done, but rather pooling operations. 
+    Runs a RFT procedure in the process to help with storage blow up. 
 
     :param X: the input data
+    :param y: the input targets
     :param train_size: how many samples to train the PUs on as a percentage of the total samples
     :param batch_size: the size of the batch to use when we make the transformations
     :param y: the target values Xs
     :param pixelhop_units: the Pixelhop units to apply to the input data
     :param load_pu: whether the Pixelhop units were loaded or not, controls whether we save the fitted PUs
     :param save_path: the path to save the PU units to if required
+    :param model_args: the model arguments
     :return transformed: the data transformed by the PU units
     """
-    # some set up
+    # set up a random sample of train_size*len(X) to train the kernels on
     indexes = np.arange(len(X))
     np.random.shuffle(indexes)
     N = round(len(X) * train_size)
@@ -179,12 +182,12 @@ def apply_pixelhops_cascaded(
     X_train = np.expand_dims(X_train, axis=-1)
 
     N_batch = round(len(X)*batch_size)
-
+    transformed = []
     for i in range(len(pixelhop_units)):
         if not load_pu:
             pixelhop_units[i].fit(X_train)
         
-        # now we run through each of the samples in a given batch and transform them, then concatenate
+        # now we run through each of the samples in a given batch and transform them
         path_to_files = DefaultDict(list)
         for j in range(0, len(X), N_batch):
             to_get = np.arange(j, j + N_batch) 
@@ -197,6 +200,7 @@ def apply_pixelhops_cascaded(
                 for depth in t.keys():
                     concat = feature_concat_one_step(t[depth])
                     t[depth] = None
+
                     path_to_file = save_path + f"tmp_{i}_{depth}_feat_batch_{j}_{j+N_batch}"
                     with open(path_to_file, "wb") as f: 
                         pickle.dump(concat, f)
@@ -204,7 +208,7 @@ def apply_pixelhops_cascaded(
                     path_to_files[depth].append(path_to_file)
                     gc.collect()
         
-        transformed[i][depth] = path_to_files
+        transformed.append(path_to_files)
 
     for i in range(len(pixelhop_units)):
         pixelhop_units[i].save(
@@ -216,7 +220,7 @@ def apply_pixelhops_cascaded(
 
 
 def apply_rfts(
-    Xs: List[Dict[int, np.array]],
+    Xs: List[Dict[int, List[str]]],
     y: List[str],
     train_index: np.array,
     val_index: np.array,
@@ -253,7 +257,11 @@ def apply_rfts(
         for k in Xs[i].keys():  # range over the raw features of the given pixelhop, each k is a depth
             if training_depth < 0 or (training_depth >= 0 and training_depth <= k): # greater than or equal to since lower levels should be loaded 
                 print(f"Fitting RFT for PU unit {i} and depth {k}")
-                feature = load_feature(Xs[i][k])[k if model_args.get("cascaded") else 0] # might be hacky
+                feature = []
+                for f in Xs[i][k]:
+                    feature.append(load_feature(f))
+                feature = np.concatenate(feature, axis = 0)
+                # feature = load_feature(Xs[i][k])[k if model_args.get("cascaded") else 0] # might be hacky
                 reshaped_targets = make_blocks(y, block_sizes[k], calculate_mean=True)
                 N, H, W, C = feature.shape
                 X_t = feature[train_index]
@@ -296,7 +304,6 @@ def apply_rfts(
     y = None
     gc.collect()
     return transformed
-
 
 def generate_rft_plots(rfts: List[Tuple[RFT, int, int]], save_path: str):
     """
@@ -648,17 +655,8 @@ def model(
             model_args
         )
 
-    # feat_concat = model_args.get("feat_concat")
-    # if feat_concat:
-    #     for i in range(len(transformed)):
-    #         # default args concat 1-hop neighbors for feature_concat
-    #         if cascaded:
-    #             transformed[i] = feature_concat(transformed[i], training_depth)
-    #         else:
-    #             # with noncascaded we can train bottom up so just transform all of them with training_depth = -1
-    #             transformed[i] = feature_concat(transformed[i], -1)
-
     # SUPERVISED FEATURE REDUCTION
+
     # we have depth * n_pixelhop_units RFTs for the raw features
     rft_units = [{}] * len(pixelhop_units) 
     rfts = model_args.get("rfts")
